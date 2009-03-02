@@ -1,0 +1,33 @@
+MobWrite
+
+README_daemon         This file.
+
+diff_match_patch_uncompressed.js   Diff library for client.
+mobwrite_core.js      Core JavaScript for synchronization.
+mobwrite_form.js      Form element handlers.
+compressed_form.js    Diff, Core and Form files compressed together.
+
+demos/index.html        Start page for demos.
+demos/editor.html       Text synchronization.
+demos/spreadsheet.html  Cell synchronization.
+demos/form.html         Form synchronization.
+
+tests/index.html   Start page for testing.
+tests/client.html  Unit test for client.
+tests/server.html  Unit test framework for server.
+tests/server.xml   Unit test data for server.
+tests/q.html       Manual test test for server.
+
+daemon/mobwrite_daemon.py   Python daemon listens on port 3017
+daemon/diff_match_patch.py  Diff library for daemon.
+daemon/q.php                PHP version of gateway between web and daemon.
+daemon/q.py                 Python version of gateway between web and daemon.
+daemon/q.jsp                JSP version of gateway between web and daemon.
+daemon/.htaccess            Hander directives for q.py under mod_python.
+
+Documentation:
+  http://code.google.com/p/google-mobwrite/
+Author:
+  Neil Fraser
+License:
+  Apache 2

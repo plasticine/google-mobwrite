@@ -1,0 +1,12 @@
+application: mobwrite3
+version: 3
+runtime: python
+api_version: 1
+
+handlers:
+- url: /static
+  static_dir: static
+- url: /scripts/q.py
+  script: mobwrite_appengine.py
+- url: /
+  script: index_redirect.py
