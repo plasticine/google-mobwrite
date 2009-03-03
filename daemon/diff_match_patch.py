@@ -60,9 +60,10 @@ class diff_match_patch:
     self.Patch_Margin = 4
 
     # How many bits in a number?
-    # Python has no maximum, disable all patch splitting.
-    # If bitwise operations on longs are too slow, try changing this to 32.
-    self.Match_MaxBits = 0
+    # Python has no maximum, thus to disable patch splitting set to 0.
+    # However to avoid long patches in certain pathological cases, use 32.
+    # Multiple short patches (using native ints) are much faster than long ones.
+    self.Match_MaxBits = 32
 
   #  DIFF FUNCTIONS
 
@@ -1154,9 +1155,9 @@ class diff_match_patch:
     Returns:
       Best match index or None.
     """
-    # Python doesn't have a limit.  But check in case someone set one.
-    assert (self.Match_MaxBits == 0 or len(pattern) <= self.Match_MaxBits,
-            "Pattern too long for this application.")
+    # Python doesn't have a maxint limit, so ignore this check.
+    #assert (self.Match_MaxBits == 0 or len(pattern) <= self.Match_MaxBits,
+    #        "Pattern too long for this application.")
 
     # Initialise the alphabet.
     s = self.match_alphabet(pattern)

@@ -2,7 +2,7 @@
 
 """MobWrite - Real-time Synchronization and Collaboration Service
 
-Copyright 2008 Neil Fraser
+Copyright 2008 Google Inc.
 http://code.google.com/p/google-mobwrite/
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -68,8 +68,8 @@ class TextObj(db.Model):
     if MAX_CHARS != 0 and len(text) > MAX_CHARS:
        text = text[-MAX_CHARS:]
        logging.warning("Truncated text to %d characters." % MAX_CHARS)
-    # Normalize linebreaks to CRLF.
-    text = re.sub(r"(\r\n|\r|\n)", "\r\n", text)
+    # Normalize linebreaks to LF.
+    text = re.sub(r"(\r\n|\r|\n)", "\n", text)
     if (self.text != text):
       self.text = text
       self.put()

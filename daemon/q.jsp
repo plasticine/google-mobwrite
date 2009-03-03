@@ -7,7 +7,7 @@
 /*
 # MobWrite - Real-time Synchronization and Collaboration Service
 #
-# Copyright 2006 Neil Fraser
+# Copyright 2006 Google Inc.
 # http://code.google.com/p/google-mobwrite/
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

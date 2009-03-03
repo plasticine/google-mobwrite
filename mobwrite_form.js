@@ -1,7 +1,7 @@
 /**
  * MobWrite - Real-time Synchronization and Collaboration Service
  *
- * Copyright 2008 Neil Fraser
+ * Copyright 2008 Google Inc.
  * http://code.google.com/p/google-mobwrite/
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -352,7 +352,7 @@ mobwrite.shareTextareaObj.prototype.getClientText = function() {
   var text = mobwrite.shareTextareaObj.normalizeLinebreaks_(this.element.value);
   if (this.element.type == 'text') {
     // Numeric data should use overwrite mode.
-    this.mergeChanges = !text.match(/^\s*-?[\d.]+\s*$/);
+    this.mergeChanges = !text.match(/^\s*-?[\d.,]+\s*$/);
   }
   return text;
 };
@@ -396,7 +396,7 @@ mobwrite.shareTextareaObj.prototype.patchClientText = function(patches) {
       } else {
         console.warn('Patch failed: ' + patches[x]);
       }
-   }
+    }
   }
 };
 
@@ -580,29 +580,13 @@ mobwrite.shareTextareaObj.prototype.restoreCursor_ = function(cursor) {
 
 
 /**
- * Ensure that all linebreaks are CR+LF
+ * Ensure that all linebreaks are LF
  * @param {string} text Text with unknown line breaks
  * @return {string} Text with normalized linebreaks
  * @private
  */
 mobwrite.shareTextareaObj.normalizeLinebreaks_ = function(text) {
-  var oldtext = '';
-  if (text != '') {
-    // First, fix the first/last chars.
-    if (text.charAt(0) == '\n') {
-      text = '\r' + text;
-    }
-    if (text.charAt(text.length - 1) == '\r') {
-      text = text + '\n';
-    }
-  }
-  // Second, fix the middle chars.
-  while (oldtext != text) {
-    oldtext = text;
-    text = text.replace(/([^\r])\n/g, '$1\r\n');
-    text = text.replace(/\r([^\n])/g, '\r\n$1');
-  }
-  return text;
+  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 };
 
 

@@ -1,7 +1,7 @@
 /**
  * MobWrite - Real-time Synchronization and Collaboration Service
  *
- * Copyright 2006 Neil Fraser
+ * Copyright 2006 Google Inc.
  * http://code.google.com/p/google-mobwrite/
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -379,7 +379,9 @@ mobwrite.syncRun1_ = function() {
   }
 
   var remote = (mobwrite.syncGateway.indexOf('://') != -1);
-  if (mobwrite.debug) {
+  if (mobwrite.debug && typeof console == 'object') {
+    // Extra check here for the existance of 'console' because
+    // the console disappears on page unload before the code does.
     console.info('TO server:\n' + data.join(''));
   }
   // Add terminating blank line.
