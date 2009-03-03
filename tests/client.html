@@ -1,8 +1,8 @@
 <!--
   Test Harness for MobWrite Client
 
-  Copyright (C) November 2007 Neil Fraser
-  http://neil.fraser.name/software/mobwrite/
+  Copyright (C) November 2007 Google Inc.
+  http://code.google.com/p/google-mobwrite/
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -20,14 +20,14 @@
 <html>
   <head>
     <TITLE>Test Harness for MobWrite Client</TITLE>
-    <!--
-    <SCRIPT SRC="../diff_match_patch.js"></SCRIPT>
+    <SCRIPT SRC="../diff_match_patch_uncompressed.js"></SCRIPT>
     <SCRIPT SRC="../mobwrite_core.js"></SCRIPT>
     <SCRIPT SRC="../mobwrite_form.js"></SCRIPT>
-    -->
+    <!--
     <SCRIPT SRC="../compressed_form.js"></SCRIPT>
+    -->
 
-    <script type="text/javascript"><!--
+    <script type="text/javascript">
       // Counters for unit test results.
       var test_good = 0;
       var test_bad = 0;
@@ -48,6 +48,9 @@
           msg += ' Expected: \'' + expected + '\' Actual: \'' + actual + '\'';
           msg = msg.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
           msg = msg.replace(/\r\n/g, '&para;');
+          msg = msg.replace(/\n/g, '&para;');
+          msg = msg.replace(/\r/g, '&para;');
+          msg = msg.replace(/\u00A0/g, '&middot;');
           document.write('<code>' + msg + '</code><BR>');
           test_bad++;
         }
@@ -110,8 +113,6 @@
         return [text1, text2];
       }
 
-      var dmp = new diff_match_patch();
-
 
       // CORE TEST FUNCTIONS
 
@@ -129,28 +130,127 @@
 
 
       function testNormalizeLinebreaks() {
-        // Null case
-        assertEquals('\r\n', mobwrite.shareTextareaObj.normalizeLinebreaks_('\r\n'));
-        // Simple
-        assertEquals('\r\n', mobwrite.shareTextareaObj.normalizeLinebreaks_('\n'));
-        assertEquals('\r\n', mobwrite.shareTextareaObj.normalizeLinebreaks_('\r'));
+        // Single
+        assertEquals('\n', mobwrite.shareTextareaObj.normalizeLinebreaks_('\n'));
+        assertEquals('\n', mobwrite.shareTextareaObj.normalizeLinebreaks_('\r'));
+        assertEquals('\n', mobwrite.shareTextareaObj.normalizeLinebreaks_('\r\n'));
         // Double
-        assertEquals('\r\n\r\n', mobwrite.shareTextareaObj.normalizeLinebreaks_('\n\n'));
+        assertEquals('\n\n', mobwrite.shareTextareaObj.normalizeLinebreaks_('\n\n'));
+        assertEquals('\n\n', mobwrite.shareTextareaObj.normalizeLinebreaks_('\r\r'));
+        assertEquals('\n\n', mobwrite.shareTextareaObj.normalizeLinebreaks_('\r\n\r\n'));
         // Mixed
-        assertEquals('_\r\n_\r\n_\r\n_ _\r\n\r\n_\r\n\r\n_\r\n\r\n_',
-           mobwrite.shareTextareaObj.normalizeLinebreaks_('_\n_\r_\r\n_ _\n\n_\r\r_\r\n\r\n_'));
+        assertEquals('_\n_\n_\n_ _\n\n_\n\n_\n\n_',
+            mobwrite.shareTextareaObj.normalizeLinebreaks_('_\n_\r_\r\n_ _\n\n_\r\r_\r\n\r\n_'));
+      }
+
+
+      function testCursor() {
+        // Create a textarea.
+        var textarea = document.createElement('textarea');
+        textarea.id = 'test_textarea';
+        document.body.appendChild(textarea);
+        var text = 'The quick brown fox jumped over the lazy dog.\n' +
+            'She sells sea shells by the sea shore.';
+        textarea.value = text;
+        textarea.focus();
+        // IE and Opera instantly convert \n into \r\n.  Gecko and Webkit don't.
+        text = textarea.value;
+        var linebreak = '\n';
+        if (textarea.value.indexOf('\r\n') != -1) {
+          linebreak = '\r\n';
+        }
+        var share = new mobwrite.shareTextareaObj(textarea);
+
+        // Fabricate a collapsed cursor right before 'shore'.
+        var cursor0 = {};
+        cursor0.startPrefix = 'ells by the sea ';
+        cursor0.startSuffix = 'shore.';
+        cursor0.startPercent = (77 + linebreak.length) / text.length;
+        cursor0.collapsed = true;
+        share.restoreCursor_(cursor0);
+
+        // Check the captured cursor is the same as the fabricated cursor.
+        var cursor1 = share.captureCursor_();
+        assertEquals(cursor0.startPrefix, cursor1.startPrefix);
+        assertEquals(cursor0.startSuffix, cursor1.startSuffix);
+        assertEquals(cursor0.startPercent, cursor1.startPercent);
+        assertEquals(cursor0.collapsed, cursor1.collapsed);
+
+        // Fabricate a selection running from 'lazy' to 'sells' inclusive.
+        cursor0 = {};
+        cursor0.startPrefix = 'jumped over the ';
+        cursor0.startSuffix = 'lazy dog.' + linebreak + 'She se';
+        cursor0.startSuffix = cursor0.startSuffix.substring(0, 16);
+        cursor0.startPercent = 36 / text.length;
+        cursor0.endPrefix = 'y dog.' + linebreak + 'She sells';
+        cursor0.endPrefix = cursor0.endPrefix
+            .substring(cursor0.endPrefix.length - 16);
+        cursor0.endSuffix = ' sea shells by t';
+        cursor0.endPercent = (54 + linebreak.length) / text.length;
+        cursor0.collapsed = false;
+        share.restoreCursor_(cursor0);
+
+        // Check the captured cursor is the same as the fabricated cursor.
+        cursor1 = share.captureCursor_();
+        assertEquals(cursor0.startPrefix, cursor1.startPrefix);
+        assertEquals(cursor0.startSuffix, cursor1.startSuffix);
+        assertEquals(cursor0.startPercent, cursor1.startPercent);
+        assertEquals(cursor0.endPrefix, cursor1.endPrefix);
+        assertEquals(cursor0.endSuffix, cursor1.endSuffix);
+        assertEquals(cursor0.endPercent, cursor1.endPercent);
+        assertEquals(cursor0.collapsed, cursor1.collapsed);
+
+        // Tweak locations and verify fuzzy match.
+        cursor1.startPrefix = 'jumped under the ';
+        cursor1.startSuffix = 'crazy cats.\tShe';
+        cursor1.endPercent = 60 / text.length;
+        share.restoreCursor_(cursor1);
+        var cursor2 = share.captureCursor_();
+        assertEquals(cursor0.startPrefix, cursor2.startPrefix);
+        assertEquals(cursor0.startSuffix, cursor2.startSuffix);
+        assertEquals(cursor0.startPercent, cursor2.startPercent);
+        assertEquals(cursor0.endPrefix, cursor2.endPrefix);
+        assertEquals(cursor0.endSuffix, cursor2.endSuffix);
+        assertEquals(cursor0.endPercent, cursor2.endPercent);
+        assertEquals(cursor0.collapsed, cursor2.collapsed);
+
+        // Tear down the text area.
+        document.body.removeChild(textarea);
+      }
+
+
+      function testMergeType() {
+        // Create a text input.
+        var input = document.createElement('input');
+        input.id = 'test_input';
+        document.body.appendChild(input);
+        var share = new mobwrite.shareTextareaObj(input);
+
+        // Check that text will merge.
+        input.value = '12Hello34';
+        share.getClientText();
+        assertEquals(true, share.mergeChanges);
+
+        // Check that numbers will not merge.
+        input.value = ' 12,345.67 ';
+        share.getClientText();
+        assertEquals(false, share.mergeChanges);
+
+        // Tear down the text input.
+        document.body.removeChild(input);
       }
 
 
       function runTests() {
-        tests = ['testUniqueId', 'testNormalizeLinebreaks'];
+        tests = ['testUniqueId', 'testNormalizeLinebreaks',
+            'testCursor', 'testMergeType'];
         for (var x = 0; x < tests.length; x++) {
           document.write('<H3>' + tests[x] + ':</H3>');
           eval(tests[x] + '()');
         }
       }
 
-    //--></script>
+    </script>
   </head>
   <body>
     <H1>Test Harness for MobWrite Client</H1>

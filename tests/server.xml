@@ -169,13 +169,13 @@ d:0:-1	+A-Z a-z 0-9 - _ . ! ~ * ' ( ) ; / ? : @ &amp; = + $ , #
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
-R:0:a%00b%25c%0D%0Ad
+R:0:a%00b%25c%0Ad
 d:0:-1
 
     </QUESTION>
     <ANSWER>
 F:1:unittest[RANDOM]
-R:0:a%00b%25c%0D%0Ad
+R:0:a%00b%25c%0Ad
 
     </ANSWER>
   </TEST>
@@ -185,13 +185,13 @@ R:0:a%00b%25c%0D%0Ad
 u:user[RANDOM]
 f:0:unittest[RANDOM]
 R:0:
-d:0:+a%00b%25c%0D%0Ad
+d:0:+a%00b%25c%0Ad
 r:1:x
 
     </QUESTION>
     <ANSWER>
 F:1:unittest[RANDOM]
-d:0:-1	+a%00b%25c%0D%0Ad
+d:0:-1	+a%00b%25c%0Ad
 
     </ANSWER>
   </TEST>
@@ -231,12 +231,12 @@ d:0:-1	+a%E3%81%86b
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
-R:0:a%0Ab
+R:0:a%0Db
 
     </QUESTION>
     <ANSWER>
 F:0:unittest[RANDOM]
-D:0:=1	+%0D	=2
+D:0:=1	-1	+%0A	=1
 
     </ANSWER>
   </TEST>
@@ -246,12 +246,12 @@ D:0:=1	+%0D	=2
 u:user[RANDOM]
 f:0:unittest[RANDOM]
 R:0:ab
-d:0:=1	+%0D	=1
+d:0:=1	+%0D%0A	=1
 
     </QUESTION>
     <ANSWER>
 F:1:unittest[RANDOM]
-d:0:=2	+%0A	=1
+d:0:=1	-1	=2
 
     </ANSWER>
   </TEST>
