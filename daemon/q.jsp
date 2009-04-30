@@ -1,9 +1,9 @@
-<%@ page contentType="text/plain" %>
-<%@ page import="java.net.Socket" %>
-<%@ page import="java.io.OutputStream" %>
-<%@ page import="java.io.InputStream" %>
-<%@ page import="java.io.BufferedInputStream" %>
-<%
+<%@ page contentType="text/plain" %><%--
+--%><%@ page import="java.net.Socket" %><%--
+--%><%@ page import="java.io.OutputStream" %><%--
+--%><%@ page import="java.io.InputStream" %><%--
+--%><%@ page import="java.io.BufferedInputStream" %><%--
+--%><%
 /*
 # MobWrite - Real-time Synchronization and Collaboration Service
 #
@@ -29,34 +29,32 @@
 */
 
 Socket socket = null;
-try
-{
-	// Connect to python mobwrite daemon
-	socket = new Socket("localhost", 3017);
-	// Incoming data seems to be in "q"
-	String data;
-	if (request.getParameter("q") != null) {
+try {
+  // Connect to python mobwrite daemon
+  socket = new Socket("localhost", 3017);
+  // Incoming data seems to be in "q"
+  String data;
+  if (request.getParameter("q") != null) {
     // Client sending a sync.  Requesting text return.
-	  data = request.getParameter("q");
+    data = request.getParameter("q");
   } else if (request.getParameter("p") != null) {
     // Client sending a sync.  Requesting JS return.
-	  data = request.getParameter("p");
-	} else {
+    data = request.getParameter("p");
+  } else {
     data = "";
   }
 
   // Write data to daemon
-	OutputStream outputStream = socket.getOutputStream();
-	outputStream.write(data.getBytes());
-	// Read the response from python and copy it to JSP out
-	InputStream inputStream = new BufferedInputStream(socket.getInputStream());
-	int read;
-  data = ""
-	while ((read = inputStream.read()) > -1)
-	{
-		data += read;
-		//System.out.println((char)read);
-	}
+  OutputStream outputStream = socket.getOutputStream();
+  outputStream.write(data.getBytes());
+  // Read the response from python and copy it to JSP out
+  InputStream inputStream = new BufferedInputStream(socket.getInputStream());
+  int read;
+  data = "";
+  while ((read = inputStream.read()) > -1) {
+    data += (char)read;
+    //System.out.println((char)read);
+  }
 
   if (request.getParameter("p") != null) {
     // Client sending a sync.  Requesting JS return.
@@ -66,21 +64,16 @@ try
   }
 
   out.write(data);
-}
-catch (Exception e)
-{
-	out.write("\n");
-}
-finally
-{
-	try
-	{
-		if (socket != null)
-			socket.close();
-	}
-	catch (Exception e)
-	{
-		e.printStackTrace();
-	}
+  out.write("\n");
+} catch (Exception e) {
+  out.write("\n");
+} finally {
+  try {
+    if (socket != null) {
+      socket.close();
+    }
+  } catch (Exception e) {
+    e.printStackTrace();
+  }
 }
 %>
