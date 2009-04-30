@@ -126,6 +126,71 @@
       }
       
 
+      // FORM TEST FUNCTIONS
+
+
+      function testValidNode() {
+        var div = document.createElement('div');
+        var textarea = document.createElement('textarea');
+        assertEquals(false, mobwrite.validNode_(textarea));
+        div.appendChild(textarea);
+        assertEquals(false, mobwrite.validNode_(textarea));
+        document.body.appendChild(div);
+        assertEquals(true, mobwrite.validNode_(textarea));
+        document.body.removeChild(div);
+        assertEquals(false, mobwrite.validNode_(textarea));
+      }
+
+
+      function testShareHandler() {
+        // Prevent the MobWrite task from starting.
+        var oldPid = mobwrite.syncRunPid_
+        mobwrite.syncRunPid_ = 1;
+
+        // Setup a textarea.
+        var textarea = document.createElement('textarea');
+        textarea.id = 'test_textarea';
+        textarea.value = 'Hello World!';
+        document.body.appendChild(textarea);
+        // Textarea is not currently shared.
+        assertEquals(false, textarea.id in mobwrite.shared);
+
+        // Share the textarea.
+        mobwrite.share(textarea);
+        assertEquals(true, textarea.id in mobwrite.shared);
+        var shareobj = mobwrite.shared[textarea.id];
+
+        // Share the textarea again and ensure it is not overwritten.
+        mobwrite.share(textarea);
+        assertEquals(true, shareobj === mobwrite.shared[textarea.id]);
+
+        // Read from textarea and ensure its continued existance.
+        assertEquals(textarea.value, shareobj.getClientText());
+        assertEquals(true, textarea.id in mobwrite.shared);
+
+        // Unshare the textarea.
+        mobwrite.unshare(textarea);
+        assertEquals(false, textarea.id in mobwrite.shared);
+
+        // Unshare the textarea again for fun.
+        mobwrite.unshare(textarea);
+        assertEquals(false, textarea.id in mobwrite.shared);
+
+        // Share the textarea again.
+        mobwrite.share(textarea);
+        assertEquals(true, textarea.id in mobwrite.shared);
+        shareobj = mobwrite.shared[textarea.id];
+
+        // Remove the textarea from the DOM and verify that it gets unshared.
+        document.body.removeChild(textarea);
+        assertEquals(textarea.value, shareobj.getClientText());
+        assertEquals(false, textarea.id in mobwrite.shared);
+
+        // Restore MobWrite's task Pid.
+        mobwrite.syncRunPid_ = oldPid;
+      }
+
+
       // TEXTAREA TEST FUNCTIONS
 
 
@@ -242,8 +307,8 @@
 
 
       function runTests() {
-        tests = ['testUniqueId', 'testNormalizeLinebreaks',
-            'testCursor', 'testMergeType'];
+        tests = ['testUniqueId', 'testValidNode', 'testShareHandler',
+            'testNormalizeLinebreaks', 'testCursor', 'testMergeType'];
         for (var x = 0; x < tests.length; x++) {
           document.write('<H3>' + tests[x] + ':</H3>');
           eval(tests[x] + '()');
