@@ -22,6 +22,20 @@
  * @author fraser@google.com (Neil Fraser)
  */
 
+/**
+ * Checks to see if the provided node is still part of the DOM.
+ * @param {Node} node DOM node to verify.
+ * @return {boolean} Is this node part of a DOM?
+ * @private
+ */
+mobwrite.validNode_ = function(node) {
+  while (node.parentNode) {
+    node = node.parentNode;
+  }
+  // The topmost node should be type 9, a document.
+  return node.nodeType == 9;
+};
+
 
 // FORM
 
@@ -73,6 +87,9 @@ mobwrite.shareHiddenObj.prototype = new mobwrite.shareObj('');
  * @return {string} Plaintext content.
  */
 mobwrite.shareHiddenObj.prototype.getClientText = function() {
+  if (!mobwrite.validNode_(this.element)) {
+    mobwrite.unshare(this.file);
+  }
   // Numeric data should use overwrite mode.
   this.mergeChanges = !this.element.value.match(/^\s*-?[\d.]+\s*$/);
   return this.element.value;
@@ -134,6 +151,9 @@ mobwrite.shareCheckboxObj.prototype = new mobwrite.shareObj('');
  * @return {string} Plaintext content.
  */
 mobwrite.shareCheckboxObj.prototype.getClientText = function() {
+  if (!mobwrite.validNode_(this.element)) {
+    mobwrite.unshare(this.file);
+  }
   return this.element.checked ? this.element.value : '';
 };
 
@@ -198,6 +218,9 @@ mobwrite.shareSelectObj.prototype = new mobwrite.shareObj('');
  * @return {string} Plaintext content.
  */
 mobwrite.shareSelectObj.prototype.getClientText = function() {
+  if (!mobwrite.validNode_(this.element)) {
+    mobwrite.unshare(this.file);
+  }
   var selected = [];
   for (var x = 0, option; option = this.element.options[x]; x++) {
     if (option.selected) {
@@ -269,6 +292,10 @@ mobwrite.shareRadioObj.prototype = new mobwrite.shareObj('');
  * @return {string} Plaintext content.
  */
 mobwrite.shareRadioObj.prototype.getClientText = function() {
+  // TODO: Handle cases where the radio buttons are added or removed.
+  if (!mobwrite.validNode_(this.elements[0])) {
+    mobwrite.unshare(this.file);
+  }
   // Group of radio buttons
   for (var x = 0; x < this.elements.length; x++) {
     if (this.elements[x].checked) {
@@ -349,6 +376,9 @@ mobwrite.shareTextareaObj.prototype = new mobwrite.shareObj('');
  * @return {string} Plaintext content.
  */
 mobwrite.shareTextareaObj.prototype.getClientText = function() {
+  if (!mobwrite.validNode_(this.element)) {
+    mobwrite.unshare(this.file);
+  }
   var text = mobwrite.shareTextareaObj.normalizeLinebreaks_(this.element.value);
   if (this.element.type == 'text') {
     // Numeric data should use overwrite mode.
@@ -370,7 +400,7 @@ mobwrite.shareTextareaObj.prototype.setClientText = function(text) {
 
 /**
  * Modify the user's plaintext by applying a series of patches against it.
- * @param {Array<patch_obj>} patches Array of Patch objects
+ * @param {Array.<patch_obj>} patches Array of Patch objects
  */
 mobwrite.shareTextareaObj.prototype.patchClientText = function(patches) {
   // Set some constants which tweak the matching behaviour.
@@ -392,9 +422,9 @@ mobwrite.shareTextareaObj.prototype.patchClientText = function(patches) {
   if (mobwrite.debug) {
     for (var x = 0; x < result[1].length; x++) {
       if (result[1][x]) {
-        console.info('Patch OK.');
+        window.console.info('Patch OK.');
       } else {
-        console.warn('Patch failed: ' + patches[x]);
+        window.console.warn('Patch failed: ' + patches[x]);
       }
     }
   }
@@ -416,8 +446,13 @@ mobwrite.shareTextareaObj.prototype.captureCursor_ = function() {
   var text = this.element.value;
   var cursor = {};
   if ('selectionStart' in this.element) {  // W3
-    var selectionStart = this.element.selectionStart;
-    var selectionEnd = this.element.selectionEnd;
+    try {
+      var selectionStart = this.element.selectionStart;
+      var selectionEnd = this.element.selectionEnd;
+    } catch (e) {
+      // No cursor; the element may be "display:none".
+      return null;
+    }
     cursor.startPrefix = text.substring(selectionStart - padLength, selectionStart);
     cursor.startSuffix = text.substring(selectionStart, selectionStart + padLength);
     cursor.startPercent = selectionStart / text.length;
@@ -619,3 +654,4 @@ mobwrite.shareTextareaObj.shareHandler = function(node) {
 
 // Register this shareHandler with MobWrite.
 mobwrite.shareHandlers.push(mobwrite.shareTextareaObj.shareHandler);
+
