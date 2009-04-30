@@ -25,21 +25,18 @@ Accepting synchronization sessions from clients.
 
 __author__ = "fraser@google.com (Neil Fraser)"
 
-import logging
 import cgi
-import urllib
 import datetime
-import re
-import diff_match_patch as dmp_module
+import sys
 from google.appengine.ext import db
 from google.appengine import runtime
 
-# Demo usage should limit the maximum size of any text.
-# Set to 0 to disable limit.
-MAX_CHARS = 50000
+import logging
+import urllib
 
-# Global Diff/Match/Patch object.
-DMP = dmp_module.diff_match_patch()
+sys.path.insert(0, "lib")
+import mobwrite_core
+del sys.path[0]
 
 # Delete any view which hasn't been accessed in half an hour.
 TIMEOUT_VIEW = datetime.timedelta(minutes=30)
@@ -52,48 +49,60 @@ TIMEOUT_TEXT = TIMEOUT_VIEW * 2
 TIMEOUT_BUFFER = datetime.timedelta(minutes=15)
 
 
-class TextObj(db.Model):
+class TextObj(mobwrite_core.TextObj, db.Model):
   # An object which stores a text.
 
   # Object properties:
-  # .text - The text itself.
   # .lasttime - The last time that this text was modified.
+
+  # Inerhited properties:
+  # .name - The unique name for this text, e.g 'proposal'.
+  # .text - The text itself.
+  # .changed - Has the text changed since the last time it was saved.
 
   text = db.TextProperty()
   lasttime = db.DateTimeProperty(auto_now=True)
 
-  def setText(self, text):
-    # Scrub the text before setting it.
-    # Keep the text within the length limit.
-    if MAX_CHARS != 0 and len(text) > MAX_CHARS:
-       text = text[-MAX_CHARS:]
-       logging.warning("Truncated text to %d characters." % MAX_CHARS)
-    # Normalize linebreaks to LF.
-    text = re.sub(r"(\r\n|\r|\n)", "\n", text)
-    if (self.text != text):
-      self.text = text
-      self.put()
-      logging.debug("Saved %db TextObj: '%s'" % (len(text), self.key().name()))
+  def __init__(self, *args, **kwargs):
+    # Setup this object
+    mobwrite_core.TextObj.__init__(self, *args, **kwargs)
+    db.Model.__init__(self, *args, **kwargs)
 
+  def setText(self, newtext):
+    mobwrite_core.TextObj.setText(self, newtext)
+    if self.changed:
+      self.put()
+      self.changed = False
+      logging.debug("Saved %db TextObj: '%s'" % (len(newtext), self.key().name()))
+
+  def safe_name(unsafe_name):
+    # DataStore doesn't like names starting with numbers.
+    return "_" + unsafe_name
+  safe_name = staticmethod(safe_name)
 
 def fetchText(name):
-  # DataStore doesn't like names starting with numbers.
-  filename = "_" + name
+  filename = TextObj.safe_name(name)
   key = db.Key.from_path(TextObj.kind(), filename)
   textobj = db.get(key)
   # Should be zero or one result.
   if textobj != None:
     logging.debug("Loaded %db TextObj: '%s'" % (len(textobj.text), filename))
   else:
-    logging.debug("Created new TextObj: '%s'" % filename)
     textobj = TextObj(key_name=filename)
+    logging.debug("Creating new TextObj: '%s'" % filename)
   return textobj
 
 
-class ViewObj(db.Model):
+class ViewObj(mobwrite_core.ViewObj, db.Model):
   # An object which contains one user's view of one text.
 
   # Object properties:
+  # .edit_stack - List of unacknowledged edits sent to the client.
+  # .lasttime - The last time (in seconds since 1970) that a web connection
+  #     serviced this object.
+  # .textobj - The shared text object being worked on.
+
+  # Inerhited properties:
   # .username - The name for the user, e.g 'fraser'
   # .filename - The name for the file, e.g 'proposal'
   # .shadow - The last version of the text sent to client.
@@ -102,10 +111,6 @@ class ViewObj(db.Model):
   # .shadow_server_version - The server's version for the shadow (m).
   # .backup_shadow_server_version - the server's version for the backup
   #     shadow (m).
-  # .edit_stack - List of unacknowledged edits sent to the client.
-  # .lasttime - The last time (in seconds since 1970) that a web connection
-  #     serviced this object.
-  # .textobj - The shared text object being worked on.
 
   username = db.StringProperty(required=True)
   filename = db.StringProperty(required=True)
@@ -118,6 +123,14 @@ class ViewObj(db.Model):
   lasttime = db.DateTimeProperty(auto_now=True)
   textobj = db.ReferenceProperty(TextObj)
 
+  def __init__(self, *args, **kwargs):
+    # Setup this object
+    mobwrite_core.ViewObj.__init__(self, *args, **kwargs)
+    # The three version numbers are required when defining a db.Model
+    kwargs["shadow_client_version"] = self.shadow_client_version
+    kwargs["shadow_server_version"] = self.shadow_server_version
+    kwargs["backup_shadow_server_version"] = self.backup_shadow_server_version
+    db.Model.__init__(self, *args, **kwargs)
 
 def fetchUserViews(username):
   query = db.GqlQuery("SELECT * FROM ViewObj WHERE username = :1", username)
@@ -331,9 +344,7 @@ def doActions(actions, echo_username):
       if user_views.has_key(filename):
         viewobj = user_views[filename]
       else:
-        viewobj = ViewObj(username=username, filename=filename,
-                          shadow_client_version=0, shadow_server_version=0,
-                          backup_shadow_server_version=0)
+        viewobj = ViewObj(username=username, filename=filename)
         logging.debug("Created new ViewObj: '%s %s'" %
             (viewobj.username, viewobj.filename))
         viewobj.shadow = u""
@@ -406,7 +417,7 @@ def doActions(actions, echo_username):
       else:
         # Expand the delta into a diff using the client shadow.
         try:
-          diffs = DMP.diff_fromDelta(viewobj.shadow, action["data"])
+          diffs = mobwrite_core.DMP.diff_fromDelta(viewobj.shadow, action["data"])
         except ValueError:
           diffs = None
           delta_ok = False
@@ -415,9 +426,9 @@ def doActions(actions, echo_username):
         viewobj.shadow_client_version += 1
         if diffs != None:
           # Expand the fragile diffs into a full set of patches.
-          patches = DMP.patch_make(viewobj.shadow, diffs)
+          patches = mobwrite_core.DMP.patch_make(viewobj.shadow, diffs)
           # First, update the client's shadow.
-          viewobj.shadow = DMP.diff_text2(diffs)
+          viewobj.shadow = mobwrite_core.DMP.diff_text2(diffs)
           viewobj.backup_shadow = viewobj.shadow
           viewobj.backup_shadow_server_version = viewobj.shadow_server_version
           # Second, deal with the server's text.
@@ -426,14 +437,14 @@ def doActions(actions, echo_username):
             textobj.setText("")
           if action["force"]:
             # Clobber the server's text if a change was received.
-            if len(diffs) > 1 or diffs[0][0] != DMP.DIFF_EQUAL:
+            if len(diffs) > 1 or diffs[0][0] != mobwrite_core.DMP.DIFF_EQUAL:
               mastertext = viewobj.shadow
               logging.debug("Overwrote content: '%s %s'" %
                   (viewobj.username, viewobj.filename))
             else:
               mastertext = textobj.text
           else:
-            (mastertext, results) = DMP.patch_apply(patches, textobj.text)
+            (mastertext, results) = mobwrite_core.DMP.patch_apply(patches, textobj.text)
             logging.debug("Patched (%s): '%s %s'" %
                 (",".join(["%s" % (x) for x in results]),
                  viewobj.username, viewobj.filename))
@@ -489,9 +500,9 @@ def generateDiffs(viewobj, last_username, last_filename,
 
   if delta_ok:
     # Create the diff between the view's text and the master text.
-    diffs = DMP.diff_main(viewobj.shadow, mastertext)
-    DMP.diff_cleanupEfficiency(diffs)
-    text = DMP.diff_toDelta(diffs)
+    diffs = mobwrite_core.DMP.diff_main(viewobj.shadow, mastertext)
+    mobwrite_core.DMP.diff_cleanupEfficiency(diffs)
+    text = mobwrite_core.DMP.diff_toDelta(diffs)
     if force:
       # Client sending 'D' means number, no error.
       # Client sending 'R' means number, client error.

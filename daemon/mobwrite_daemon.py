@@ -25,20 +25,19 @@ from clients.
 
 __author__ = "fraser@google.com (Neil Fraser)"
 
-import logging
 import os.path
 import socket
 import SocketServer
+import sys
 import time
 import thread
-import urllib
-import re
-import sys
-import diff_match_patch as dmp_module
 
-# Demo usage should limit the maximum size of any text.
-# Set to 0 to disable limit.
-MAX_CHARS = 10000
+import logging
+import urllib
+
+sys.path.insert(0, "lib")
+import mobwrite_core
+del sys.path[0]
 
 # Demo usage should limit the maximum number of connected views.
 # Set to 0 to disable limit.
@@ -53,12 +52,6 @@ LOCAL_PORT = 3017
 # If the connection stalls for more than 2 seconds, give up.
 TIMEOUT = 2.0
 
-# Global Diff/Match/Patch object.
-DMP = dmp_module.diff_match_patch()
-
-# Choose from: CRITICAL, ERROR, WARNING, INFO, DEBUG
-logging.getLogger().setLevel(logging.DEBUG)
-
 # Dictionary of all text objects.
 texts = {}
 
@@ -66,68 +59,50 @@ texts = {}
 lock_texts = thread.allocate_lock()
 
 
-class TextObj:
+class TextObj(mobwrite_core.TextObj):
   # A persistent object which stores a text.
 
   # Object properties:
-  # .name - The unique name for this text, e.g 'proposal'
-  # .views - List of views currently connected to this text.
-  # .text - The text itself.
-  # .changed - Has the text changed since the last time it was written to disk.
   # .lock - Access control for writing to the text on this object.
+  # .views - Count of views currently connected to this text.
 
-  def __init__(self, newname):
+  # Inerhited properties:
+  # .name - The unique name for this text, e.g 'proposal'.
+  # .text - The text itself.
+  # .changed - Has the text changed since the last time it was saved.
+  # .lasttime - The last time that this text was modified.
+
+  def __init__(self, *args, **kwargs):
     # Setup this object
-    self.name = newname
-    self.views = []
-    self.text = None
-    self.changed = False
+    mobwrite_core.TextObj.__init__(self, *args, **kwargs)
+    self.views = 0
     self.lock = thread.allocate_lock()
-    self.lock.acquire()
     self.load()
-    self.lock.release()
 
     # lock_texts must be acquired by the caller to prevent simultaneous
     # creations of the same text.
     assert lock_texts.locked(), "Can't create TextObj unless locked."
     global texts
-    texts[newname] = self
-
-  def setText(self, text):
-    # Scrub the text before setting it.
-    # Keep the text within the length limit.
-    if MAX_CHARS != 0 and len(text) > MAX_CHARS:
-       text = text[-MAX_CHARS:]
-       logging.warning("Truncated text to %d characters." % MAX_CHARS)
-    # Normalize linebreaks to LF.
-    text = re.sub(r"(\r\n|\r|\n)", "\n", text)
-    if (self.text != text):
-      self.text = text
-      self.changed = True
+    texts[self.name] = self
 
   def cleanup(self):
     # General cleanup task.
-    # * Save to disk.
-    # * Delete myself if I've been orphaned.
+    # Save to disk.
+    # Delete myself if I've been idle too long.
     # Lock must be acquired to prevent simultaneous deletions.
     self.lock.acquire()
-    # Don't delete during a retrieval.
-    lock_texts.acquire()
     self.save()
-    # Delete the text object if it has got no views.
-    if len(self.views) == 0:
+    if self.views <= 0:
       logging.info("Unloading text: '%s'" % self.name)
       global texts
+      lock_texts.acquire()
       del texts[self.name]
+      lock_texts.release()
     else:
       self.lock.release()
-    lock_texts.release()
 
   def load(self):
     # Load the text (if present) from disk.
-    # Lock must be acquired by the caller to prevent load in the middle of a
-    # save or diff.
-    assert self.lock.locked(), "Can't load unless locked."
     filename = "%s/%s.txt" % (DATA_DIR, urllib.quote(self.name))
     if os.path.exists(filename):
       try:
@@ -166,9 +141,9 @@ def fetch_textobj(name, view):
     textobj = texts[name]
     logging.debug("Accepted text: '%s'" % name)
   else:
-    textobj = TextObj(name)
+    textobj = TextObj(name=name)
     logging.debug("Creating text: '%s'" % name)
-  textobj.views.append(view)
+  textobj.views += 1
   lock_texts.release()
   return textobj
 
@@ -179,43 +154,39 @@ views = {}
 # Lock to prevent simultaneous changes to the views dictionary.
 lock_views = thread.allocate_lock()
 
-class ViewObj:
+class ViewObj(mobwrite_core.ViewObj):
   # A persistent object which contains one user's view of one text.
 
   # Object properties:
-  # .username - The name for the user, e.g. 'fraser'
-  # .filename - The name for the file, e.g 'proposal'
+  # .edit_stack - List of unacknowledged edits sent to the client.
   # .lasttime - The last time (in seconds since 1970) that a web connection
   #     serviced this object.
+  # .lock - Access control for writing to the text on this object.
+  # .textobj - The shared text object being worked on.
+
+  # Inerhited properties:
+  # .username - The name for the user, e.g 'fraser'
+  # .filename - The name for the file, e.g 'proposal'
   # .shadow - The last version of the text sent to client.
   # .backup_shadow - The previous version of the text sent to client.
   # .shadow_client_version - The client's version for the shadow (n).
   # .shadow_server_version - The server's version for the shadow (m).
   # .backup_shadow_server_version - the server's version for the backup
   #     shadow (m).
-  # .edit_stack - List of unacknowledged edits sent to the client.
-  # .lock - Access control for writing to the text on this object.
-  # .textobj - The shared text object being worked on.
 
-  def __init__(self, username, filename):
+  def __init__(self, *args, **kwargs):
     # Setup this object
-    self.username = username
-    self.filename = filename
-    self.lasttime = time.time()
-    self.shadow = u""
-    self.backup_shadow = u""
-    self.shadow_client_version = 0
-    self.shadow_server_version = 0
-    self.backup_shadow_server_version = 0
+    mobwrite_core.ViewObj.__init__(self, *args, **kwargs)
     self.edit_stack = []
+    self.lasttime = time.time()
     self.lock = thread.allocate_lock()
-    self.textobj = fetch_textobj(filename, self)
+    self.textobj = fetch_textobj(self.filename, self)
 
     # lock_views must be acquired by the caller to prevent simultaneous
     # creations of the same view.
     assert lock_views.locked(), "Can't create ViewObj unless locked."
     global views
-    views[(username, filename)] = self
+    views[(self.username, self.filename)] = self
 
 
   def cleanup(self):
@@ -225,7 +196,6 @@ class ViewObj:
     lock_views.acquire()
     if self.lasttime < time.time() - (15 * 60):
       logging.info("Idle out: '%s %s'" % (self.username, self.filename))
-      self.textobj.views.remove(self)
       global views
       del views[(self.username, self.filename)]
     lock_views.release()
@@ -245,7 +215,7 @@ def fetch_viewobj(username, filename):
     if MAX_VIEWS != 0 and len(views) > MAX_VIEWS:
       # Overflow, stop hammering my server.
       return None
-    viewobj = ViewObj(username, filename)
+    viewobj = ViewObj(username=username, filename=filename)
     logging.debug("Creating view: '%s %s'" % key)
   lock_views.release()
   return viewobj
@@ -576,7 +546,7 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
         else:
           # Expand the delta into a diff using the client shadow.
           try:
-            diffs = DMP.diff_fromDelta(viewobj.shadow, action["data"])
+            diffs = mobwrite_core.DMP.diff_fromDelta(viewobj.shadow, action["data"])
           except ValueError:
             diffs = None
             delta_ok = False
@@ -585,9 +555,9 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
           viewobj.shadow_client_version += 1
           if diffs != None:
             # Expand the fragile diffs into a full set of patches.
-            patches = DMP.patch_make(viewobj.shadow, diffs)
+            patches = mobwrite_core.DMP.patch_make(viewobj.shadow, diffs)
             # First, update the client's shadow.
-            viewobj.shadow = DMP.diff_text2(diffs)
+            viewobj.shadow = mobwrite_core.DMP.diff_text2(diffs)
             viewobj.backup_shadow = viewobj.shadow
             viewobj.backup_shadow_server_version = viewobj.shadow_server_version
             # Second, deal with the server's text.
@@ -597,14 +567,14 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
               textobj.setText("")
             if action["force"]:
               # Clobber the server's text if a change was received.
-              if len(diffs) > 1 or diffs[0][0] != DMP.DIFF_EQUAL:
+              if len(diffs) > 1 or diffs[0][0] != mobwrite_core.DMP.DIFF_EQUAL:
                 mastertext = viewobj.shadow
                 logging.debug("Overwrote content: '%s %s'" %
                     (viewobj.username, viewobj.filename))
               else:
                 mastertext = textobj.text
             else:
-              (mastertext, results) = DMP.patch_apply(patches, textobj.text)
+              (mastertext, results) = mobwrite_core.DMP.patch_apply(patches, textobj.text)
               logging.debug("Patched (%s): '%s %s'" %
                   (",".join(["%s" % (x) for x in results]),
                    viewobj.username, viewobj.filename))
@@ -655,9 +625,9 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
     mastertext = textobj.text
     if delta_ok:
       # Create the diff between the view's text and the master text.
-      diffs = DMP.diff_main(viewobj.shadow, mastertext)
-      DMP.diff_cleanupEfficiency(diffs)
-      text = DMP.diff_toDelta(diffs)
+      diffs = mobwrite_core.DMP.diff_main(viewobj.shadow, mastertext)
+      mobwrite_core.DMP.diff_cleanupEfficiency(diffs)
+      text = mobwrite_core.DMP.diff_toDelta(diffs)
       if force:
         # Client sending 'D' means number, no error.
         # Client sending 'R' means number, client error.
@@ -694,6 +664,9 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
 
 
 def main():
+  # Choose from: CRITICAL, ERROR, WARNING, INFO, DEBUG
+  logging.getLogger().setLevel(logging.DEBUG)
+
   # Start up a thread that does timeouts and cleanup
   thread.start_new_thread(cleanup_thread, ())
 

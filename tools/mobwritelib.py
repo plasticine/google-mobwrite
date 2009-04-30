@@ -68,7 +68,7 @@ def download(url, filenames):
       (name, value) = (line[:1], line[2:])
 
       # Trim off the version number from file, delta or raw.
-      if ("FfDdRr".find(name) != -1):
+      if "FfDdRr".find(name) != -1:
         div = value.find(":")
         if div == -1:
           continue
@@ -141,6 +141,36 @@ class ShareObj:
     self.shadow_server_version = 0
     self.edit_stack = []
     self.text = u""
+
+def syncBlocking(url, textlist):
+  """Upload one or more files from a MobWrite server.
+
+  Args:
+    url: An http or telnet URL to a MobWrite server.
+        e.g. "http://mobwrite3.appspot.com/scripts/q.py"
+        e.g. "telnet://localhost:3017"
+    textlist: An array of configuration objects, one for each text to sync.
+        As a minimum each object must have a filename.
+        e.g. [{"filename": "title", "serverversion": 2, ...}]
+
+  Returns:
+    True or false, depending on whether the MobWrite server answered.
+  """
+  #q = ["u:%s" % uniqueId()]
+  #for filename in dictionary:
+  #  data = dictionary[filename]
+  #  # High ascii will raise UnicodeDecodeError.  Use Unicode instead.
+  #  data = data.encode("utf-8")
+  #  data = urllib.quote(data, "!~*'();/?:@&=+$,# ")
+  #  q.append("f:0:%s\nR:0:%s" % (filename, data))
+  #q.append("\n")  # Trailing blank line required.
+  #q = "\n".join(q)
+
+  #data = send(url, q)
+  # Ignore the response, but check that there is one.
+  # Maybe in the future this should parse and verify the answer?
+  #return data.strip() != ""
+  return True
 
 def send(url, commands):
   """Send some raw commands to a MobWrite server, return the raw answer.
