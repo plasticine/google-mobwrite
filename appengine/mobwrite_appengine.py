@@ -28,25 +28,14 @@ __author__ = "fraser@google.com (Neil Fraser)"
 import cgi
 import datetime
 import sys
+import urllib
+
 from google.appengine.ext import db
 from google.appengine import runtime
-
-import logging
-import urllib
 
 sys.path.insert(0, "lib")
 import mobwrite_core
 del sys.path[0]
-
-# Delete any view which hasn't been accessed in half an hour.
-TIMEOUT_VIEW = datetime.timedelta(minutes=30)
-
-# Delete any text which hasn't been accessed in an hour.
-# TIMEOUT_TEXT should be about twice the length of TIMEOUT_VIEW
-TIMEOUT_TEXT = TIMEOUT_VIEW * 2
-
-# Delete any buffer which hasn't been written to in a quarter of an hour.
-TIMEOUT_BUFFER = datetime.timedelta(minutes=15)
 
 
 class TextObj(mobwrite_core.TextObj, db.Model):
@@ -72,8 +61,12 @@ class TextObj(mobwrite_core.TextObj, db.Model):
     mobwrite_core.TextObj.setText(self, newtext)
     if self.changed:
       self.put()
+      if newtext == None:
+        mobwrite_core.LOG.debug("Nullified TextObj: '%s'" % self.key().name())
+      else:
+        mobwrite_core.LOG.debug("Saved %db TextObj: '%s'" %
+            (len(newtext), self.key().name()))
       self.changed = False
-      logging.debug("Saved %db TextObj: '%s'" % (len(newtext), self.key().name()))
 
   def safe_name(unsafe_name):
     # DataStore doesn't like names starting with numbers.
@@ -86,10 +79,14 @@ def fetchText(name):
   textobj = db.get(key)
   # Should be zero or one result.
   if textobj != None:
-    logging.debug("Loaded %db TextObj: '%s'" % (len(textobj.text), filename))
+    if textobj.text == None:
+      mobwrite_core.LOG.debug("Loaded null TextObj: '%s'" % filename)
+    else:
+      mobwrite_core.LOG.debug("Loaded %db TextObj: '%s'" %
+          (len(textobj.text), filename))
   else:
     textobj = TextObj(key_name=filename)
-    logging.debug("Creating new TextObj: '%s'" % filename)
+    mobwrite_core.LOG.debug("Creating new TextObj: '%s'" % filename)
   return textobj
 
 
@@ -98,8 +95,7 @@ class ViewObj(mobwrite_core.ViewObj, db.Model):
 
   # Object properties:
   # .edit_stack - List of unacknowledged edits sent to the client.
-  # .lasttime - The last time (in seconds since 1970) that a web connection
-  #     serviced this object.
+  # .lasttime - The last time that a web connection serviced this object.
   # .textobj - The shared text object being worked on.
 
   # Inerhited properties:
@@ -132,16 +128,20 @@ class ViewObj(mobwrite_core.ViewObj, db.Model):
     kwargs["backup_shadow_server_version"] = self.backup_shadow_server_version
     db.Model.__init__(self, *args, **kwargs)
 
+  def nullify(self):
+    mobwrite_core.LOG.debug("Nullified ViewObj: '%s'" % self.key().name())
+    self.delete()
+
 def fetchUserViews(username):
   query = db.GqlQuery("SELECT * FROM ViewObj WHERE username = :1", username)
   # Convert list to a hash, and also load the associated text objects.
   views = {}
   for viewobj in query:
-    logging.debug("Loaded %db ViewObj: '%s %s'" %
+    mobwrite_core.LOG.debug("Loaded %db ViewObj: '%s %s'" %
         (len(viewobj.shadow), viewobj.username, viewobj.filename))
     views[viewobj.filename] = viewobj
   if len(views) == 0:
-    logging.debug("Unable to find any ViewObj for: '%s'" % username)
+    mobwrite_core.LOG.debug("Unable to find any ViewObj for: '%s'" % username)
   return views
 
 
@@ -171,10 +171,10 @@ def setToBuffer(name, size, index, datum):
       data.append("")
     data[index - 1] = datum
     bufferobj = BufferObj(key_name=name, data=data)
-    logging.debug("Created new BufferObj: '%s' (%d)" % (name, index))
+    mobwrite_core.LOG.debug("Created new BufferObj: '%s' (%d)" % (name, index))
   else:
     bufferobj.data[index - 1] = datum
-    logging.debug("Reloaded existing BufferObj: '%s' (%d)" % (name, index))
+    mobwrite_core.LOG.debug("Reloaded existing BufferObj: '%s' (%d)" % (name, index))
   bufferobj.put()
 
 
@@ -193,46 +193,46 @@ def getFromBuffer(name, size):
 
 
 def cleanup():
-  logging.info("Cleaning database")
+  mobwrite_core.LOG.info("Cleaning database")
   try:
     # Delete any view which hasn't been written to in half an hour.
-    limit = datetime.datetime.now() - TIMEOUT_VIEW
+    limit = datetime.datetime.now() - mobwrite_core.TIMEOUT_VIEW
     query = db.GqlQuery("SELECT * FROM ViewObj WHERE lasttime < :1", limit)
     for datum in query:
       print "Deleting '%s %s' ViewObj" % (datum.username, datum.filename)
       datum.delete()
 
     # Delete any text which hasn't been written to in an hour.
-    limit = datetime.datetime.now() - TIMEOUT_TEXT
+    limit = datetime.datetime.now() - mobwrite_core.TIMEOUT_TEXT
     query = db.GqlQuery("SELECT * FROM TextObj WHERE lasttime < :1", limit)
     for datum in query:
       print "Deleting '%s' TextObj" % datum.key().id_or_name()
       datum.delete()
 
     # Delete any buffer which hasn't been written to in a quarter of an hour.
-    limit = datetime.datetime.now() - TIMEOUT_BUFFER
+    limit = datetime.datetime.now() - mobwrite_core.TIMEOUT_BUFFER
     query = db.GqlQuery("SELECT * FROM BufferObj WHERE lasttime < :1", limit)
     for datum in query:
       print "Deleting '%s' BufferObj" % datum.key().id_or_name()
       datum.delete()
 
     print "Database clean."
-    logging.info("Database clean")
+    mobwrite_core.LOG.info("Database clean")
   except runtime.DeadlineExceededError:
     print "Cleanup only partially complete.  Deadline exceeded."
-    logging.warning("Database only partially cleaned")
+    mobwrite_core.LOG.warning("Database only partially cleaned")
 
 
 def parseRequest(data):
   # Passing a Unicode string is an easy way to cause numerous subtle bugs.
   if type(data) != str:
-    logging.critical("parseRequest data type is %s" % type(data))
+    mobwrite_core.LOG.critical("parseRequest data type is %s" % type(data))
     return ""
   if not (data.endswith("\n\n") or data.endswith("\r\r") or
           data.endswith("\n\r\n\r") or data.endswith("\r\n\r\n")):
     # There must be a linefeed followed by a blank line.
     # Truncated data.  Abort.
-    logging.warning("Truncated data: '%s'" % data)
+    mobwrite_core.LOG.warning("Truncated data: '%s'" % data)
     return ""
 
   # Parse the lines
@@ -259,11 +259,11 @@ def parseRequest(data):
         try:
           version = int(value[:div])
         except ValueError:
-          logging.warning("Invalid version number: %s" % line)
+          mobwrite_core.LOG.warning("Invalid version number: %s" % line)
           continue
         value = value[div + 1:]
       else:
-        logging.warning("Missing version number: %s" % line)
+        mobwrite_core.LOG.warning("Missing version number: %s" % line)
         continue
 
     if name == "b" or name == "B":
@@ -273,14 +273,14 @@ def parseRequest(data):
         size = int(size)
         index = int(index)
       except ValueError:
-        logging.warning("Invalid buffer format: %s" % value)
+        mobwrite_core.LOG.warning("Invalid buffer format: %s" % value)
         continue
       # Store this buffer fragment.
       db.run_in_transaction(setToBuffer, name, size, index, text)
       # Check to see if the buffer is complete.  If so, execute it.
       text = getFromBuffer(name, size)
       if text:
-        logging.info("Executing buffer: %s_%d" % (name, size))
+        mobwrite_core.LOG.info("Executing buffer: %s_%d" % (name, size))
         # Duplicate last character.  Should be a line break.
         output.append(parseRequest(text + text[-1]))
 
@@ -295,6 +295,16 @@ def parseRequest(data):
       # Remember the filename and version.
       filename = value
       server_version = version
+
+    elif name == "n" or name == "N":
+      # Nullify this file.
+      filename = value
+      if username and filename:
+        action = {}
+        action["username"] = username
+        action["filename"] = filename
+        action["mode"] = "null"
+        actions.append(action)
 
     else:
       # A delta or raw action.
@@ -345,7 +355,7 @@ def doActions(actions, echo_username):
         viewobj = user_views[filename]
       else:
         viewobj = ViewObj(username=username, filename=filename)
-        logging.debug("Created new ViewObj: '%s %s'" %
+        mobwrite_core.LOG.debug("Created new ViewObj: '%s %s'" %
             (viewobj.username, viewobj.filename))
         viewobj.shadow = u""
         viewobj.backup_shadow = u""
@@ -355,11 +365,19 @@ def doActions(actions, echo_username):
       delta_ok = True
       textobj = viewobj.textobj
 
+    if action["mode"] == "null":
+      # Nullify the text.
+      mobwrite_core.LOG.debug("Nullifying: '%s %s'" %
+          (viewobj.username, viewobj.filename))
+      textobj.setText(None)
+      viewobj.nullify();
+      viewobj = None
+      continue
 
     if (action["server_version"] != viewobj.shadow_server_version and
         action["server_version"] == viewobj.backup_shadow_server_version):
       # Client did not receive the last response.  Roll back the shadow.
-      logging.warning("Rollback from shadow %d to backup shadow %d" %
+      mobwrite_core.LOG.warning("Rollback from shadow %d to backup shadow %d" %
           (viewobj.shadow_server_version, viewobj.backup_shadow_server_version))
       viewobj.shadow = viewobj.backup_shadow
       viewobj.shadow_server_version = viewobj.backup_shadow_server_version
@@ -379,7 +397,7 @@ def doActions(actions, echo_username):
     if action["mode"] == "raw":
       # It's a raw text dump.
       data = urllib.unquote(action["data"]).decode("utf-8")
-      logging.info("Got %db raw text: '%s %s'" %
+      mobwrite_core.LOG.info("Got %db raw text: '%s %s'" %
           (len(data), viewobj.username, viewobj.filename))
       delta_ok = True
       # First, update the client's shadow.
@@ -389,30 +407,30 @@ def doActions(actions, echo_username):
       viewobj.backup_shadow = viewobj.shadow
       viewobj.backup_shadow_server_version = viewobj.shadow_server_version
       viewobj.edit_stack = ""
-      if action["force"]:
+      if action["force"] or textobj.text == None:
         # Clobber the server's text.
         if textobj.text != data:
           textobj.setText(data)
-          logging.debug("Overwrote content: '%s %s'" %
+          mobwrite_core.LOG.debug("Overwrote content: '%s %s'" %
               (viewobj.username, viewobj.filename))
     elif action["mode"] == "delta":
       # It's a delta.
-      logging.info("Got '%s' delta: '%s %s'" %
+      mobwrite_core.LOG.info("Got '%s' delta: '%s %s'" %
           (action["data"], viewobj.username, viewobj.filename))
       if action["server_version"] != viewobj.shadow_server_version:
         # Can't apply a delta on a mismatched shadow version.
         delta_ok = False
-        logging.warning("Shadow version mismatch: %d != %d" %
+        mobwrite_core.LOG.warning("Shadow version mismatch: %d != %d" %
             (action["server_version"], viewobj.shadow_server_version))
       elif action["client_version"] > viewobj.shadow_client_version:
         # Client has a version in the future?
         delta_ok = False
-        logging.warning("Future delta: %d > %d" %
+        mobwrite_core.LOG.warning("Future delta: %d > %d" %
             (action["client_version"], viewobj.shadow_client_version))
       elif action["client_version"] < viewobj.shadow_client_version:
         # We've already seen this diff.
         pass
-        logging.warning("Repeated delta: %d < %d" %
+        mobwrite_core.LOG.warning("Repeated delta: %d < %d" %
             (action["client_version"], viewobj.shadow_client_version))
       else:
         # Expand the delta into a diff using the client shadow.
@@ -421,7 +439,7 @@ def doActions(actions, echo_username):
         except ValueError:
           diffs = None
           delta_ok = False
-          logging.warning("Delta failure, expected %d length: '%s %s'" %
+          mobwrite_core.LOG.warning("Delta failure, expected %d length: '%s %s'" %
               (len(viewobj.shadow), viewobj.username, viewobj.filename))
         viewobj.shadow_client_version += 1
         if diffs != None:
@@ -434,26 +452,28 @@ def doActions(actions, echo_username):
           # Second, deal with the server's text.
           if textobj.text == None:
             # A view is sending a valid delta on a file we've never heard of.
-            textobj.setText("")
+            textobj.setText(viewobj.shadow)
+            action["force"] = False
           if action["force"]:
             # Clobber the server's text if a change was received.
             if len(diffs) > 1 or diffs[0][0] != mobwrite_core.DMP.DIFF_EQUAL:
               mastertext = viewobj.shadow
-              logging.debug("Overwrote content: '%s %s'" %
+              mobwrite_core.LOG.debug("Overwrote content: '%s %s'" %
                   (viewobj.username, viewobj.filename))
             else:
               mastertext = textobj.text
           else:
             (mastertext, results) = mobwrite_core.DMP.patch_apply(patches, textobj.text)
-            logging.debug("Patched (%s): '%s %s'" %
+            mobwrite_core.LOG.debug("Patched (%s): '%s %s'" %
                 (",".join(["%s" % (x) for x in results]),
                  viewobj.username, viewobj.filename))
           if textobj.text != mastertext:
             textobj.setText(mastertext)
-          if textobj.lasttime + TIMEOUT_TEXT < viewobj.lasttime + TIMEOUT_VIEW:
+          if (textobj.lasttime + mobwrite_core.TIMEOUT_TEXT <
+              viewobj.lasttime + mobwrite_core.TIMEOUT_VIEW):
             # Text object will expire before this view.  Bump the database.
             textobj.put()
-            logging.info("Keep-alive save for TextObj: '%s'" %
+            mobwrite_core.LOG.info("Keep-alive save for TextObj: '%s'" %
                          textobj.key().name())
 
     # Generate output if this is the last action or the username/filename
@@ -489,16 +509,17 @@ def generateDiffs(viewobj, last_username, last_filename,
   # Accept this view's version of the text if we've never heard of this
   # text before.
   if textobj.text == None:
+    force = False
     if delta_ok:
       textobj.setText(viewobj.shadow)
-    else:
-      textobj.setText("")
 
   mastertext = textobj.text
 
   stack = stringToStack(viewobj.edit_stack)
 
   if delta_ok:
+    if mastertext == None:
+      mastertext = ""
     # Create the diff between the view's text and the master text.
     diffs = mobwrite_core.DMP.diff_main(viewobj.shadow, mastertext)
     mobwrite_core.DMP.diff_cleanupEfficiency(diffs)
@@ -516,26 +537,34 @@ def generateDiffs(viewobj, last_username, last_filename,
       stack.append((viewobj.shadow_server_version,
           "d:%d:%s\n" % (viewobj.shadow_server_version, text)))
     viewobj.shadow_server_version += 1
-    logging.info("Sent '%s' delta: '%s %s'" %
+    mobwrite_core.LOG.info("Sent '%s' delta: '%s %s'" %
         (text, viewobj.username, viewobj.filename))
   else:
     # Error; server could not parse client's delta.
-    # Send a raw dump of the text.  Force overwrite of client.
+    # Send a raw dump of the text.
     viewobj.shadow_client_version += 1
-    text = mastertext
-    text = text.encode("utf-8")
-    text = urllib.quote(text, "!~*'();/?:@&=+$,# ")
-    stack.append((viewobj.shadow_server_version,
-        "R:%d:%s\n" % (viewobj.shadow_server_version, text)))
-    logging.info("Sent %db raw text: '%s %s'" %
-        (len(text), viewobj.username, viewobj.filename))
+    if mastertext == None:
+      mastertext = ""
+      stack.append((viewobj.shadow_server_version,
+          "r:%d:\n" % viewobj.shadow_server_version))
+      mobwrite_core.LOG.info("Sent empty raw text: '%s %s'" %
+          (viewobj.username, viewobj.filename))
+    else:
+      # Force overwrite of client.
+      text = mastertext
+      text = text.encode("utf-8")
+      text = urllib.quote(text, "!~*'();/?:@&=+$,# ")
+      stack.append((viewobj.shadow_server_version,
+          "R:%d:%s\n" % (viewobj.shadow_server_version, text)))
+      mobwrite_core.LOG.info("Sent %db raw text: '%s %s'" %
+          (len(text), viewobj.username, viewobj.filename))
 
   viewobj.shadow = mastertext
  
   for edit in stack:
     output.append(edit[1])
 
-  logging.debug("Saving %db ViewObj: '%s %s'" %
+  mobwrite_core.LOG.debug("Saving %db ViewObj: '%s %s'" %
       (len(viewobj.shadow), viewobj.username, viewobj.filename))
   viewobj.edit_stack = stackToString(stack)
   viewobj.put()
@@ -558,9 +587,6 @@ def stackToString(stack):
 
 
 def main():
-  # Choose from: CRITICAL, ERROR, WARNING, INFO, DEBUG
-  logging.getLogger().setLevel(logging.DEBUG)
-
   form = cgi.FieldStorage()
   if form.has_key("q"):
     # Client sending a sync.  Requesting text return.
@@ -585,8 +611,10 @@ def main():
     print "Content-Type: text/plain"
     print ""
 
-  logging.debug("Disconnecting.")
+  mobwrite_core.LOG.debug("Disconnecting.")
 
 
 if __name__ == "__main__":
+  mobwrite_core.logging.basicConfig()
   main()
+  mobwrite_core.logging.shutdown()

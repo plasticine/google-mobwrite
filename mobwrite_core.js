@@ -47,7 +47,7 @@ mobwrite.get_maxchars = 200;
  * Print diagnostic messages to the browser's console.
  * @type {boolean}
  */
-mobwrite.debug = true;
+mobwrite.debug = false;
 
 
 // Debug mode requires a compatible console.
@@ -139,6 +139,13 @@ mobwrite.idPrefix = '';
 
 
 /**
+ * Flag to nullify all shared elements and terminate.
+ * @type {boolean}
+ */
+mobwrite.nullifyAll = false;
+
+
+/**
  * Track whether something changed client-side or server-side in each sync.
  * @type {boolean}
  * @private
@@ -210,6 +217,7 @@ mobwrite.shareObj = function(id) {
   if (id) {
     this.file = id;
     this.dmp = new diff_match_patch();
+    this.dmp.Diff_Timeout = 0.5;
     // List of unacknowledged edits sent to the server.
     this.editStack = [];
     if (mobwrite.debug) {
@@ -318,6 +326,16 @@ mobwrite.shareObj.prototype.fireChange = function(target) {
 
 
 /**
+ * Return the command to nullify this field.  Also unshares this field.
+ * @return {string} Commands to be sent to the server.
+ */
+mobwrite.shareObj.prototype.nullify = function() {
+  mobwrite.unshare(this.file);
+  return 'N:' + encodeURI(mobwrite.idPrefix + this.file) + '\n';
+};
+
+
+/**
  * Asks the shareObj to synchronize.  Computes client-made changes since
  * previous postback.  Return '' to skip this synchronization.
  * @return {string} Commands to be sent to the server.
@@ -381,7 +399,11 @@ mobwrite.syncRun1_ = function() {
   // Ask every shared object for their deltas.
   for (var x in mobwrite.shared) {
     if (mobwrite.shared.hasOwnProperty(x)) {
-      data.push(mobwrite.shared[x].syncText());
+      if (mobwrite.nullifyAll) {
+        data.push(mobwrite.shared[x].nullify());
+      } else {
+        data.push(mobwrite.shared[x].syncText());
+      }
       empty = false;
     }
   }

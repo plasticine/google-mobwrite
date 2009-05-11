@@ -25,13 +25,30 @@ __author__ = "fraser@google.com (Neil Fraser)"
 import re
 import diff_match_patch as dmp_module
 import logging
+import datetime
 
 # Global Diff/Match/Patch object.
 DMP = dmp_module.diff_match_patch()
+DMP.Diff_Timeout = 0.1
 
 # Demo usage should limit the maximum size of any text.
 # Set to 0 to disable limit.
 MAX_CHARS = 20000
+
+# Delete any view which hasn't been accessed in half an hour.
+TIMEOUT_VIEW = datetime.timedelta(minutes=30)
+
+# Delete any text which hasn't been accessed in a day.
+# TIMEOUT_TEXT should be longer than the length of TIMEOUT_VIEW
+TIMEOUT_TEXT = datetime.timedelta(days=1)
+
+# Delete any buffer which hasn't been written to in a quarter of an hour.
+TIMEOUT_BUFFER = datetime.timedelta(minutes=15)
+
+LOG = logging.getLogger("mobwrite")
+# Choose from: CRITICAL, ERROR, WARNING, INFO, DEBUG
+LOG.setLevel(logging.DEBUG)
+
 
 class TextObj:
   # An object which stores a text.
@@ -49,12 +66,13 @@ class TextObj:
 
   def setText(self, newtext):
     # Scrub the text before setting it.
-    # Keep the text within the length limit.
-    if MAX_CHARS != 0 and len(newtext) > MAX_CHARS:
-      newtext = newtext[-MAX_CHARS:]
-      logging.warning("Truncated text to %d characters." % MAX_CHARS)
-    # Normalize linebreaks to LF.
-    newtext = re.sub(r"(\r\n|\r|\n)", "\n", newtext)
+    if newtext != None:
+      # Keep the text within the length limit.
+      if MAX_CHARS != 0 and len(newtext) > MAX_CHARS:
+        newtext = newtext[-MAX_CHARS:]
+        LOG.warning("Truncated text to %d characters." % MAX_CHARS)
+      # Normalize linebreaks to LF.
+      newtext = re.sub(r"(\r\n|\r|\n)", "\n", newtext)
     if self.text != newtext:
       self.text = newtext
       self.changed = True

@@ -25,14 +25,14 @@ from clients.
 
 __author__ = "fraser@google.com (Neil Fraser)"
 
-import os.path
+import datetime
+import glob
+import os
 import socket
 import SocketServer
 import sys
 import time
 import thread
-
-import logging
 import urllib
 
 sys.path.insert(0, "lib")
@@ -43,17 +43,31 @@ del sys.path[0]
 # Set to 0 to disable limit.
 MAX_VIEWS = 1000
 
+# How should data be stored.
+MEMORY = 0
+FILE = 1
+BDB = 2
+STORAGE_MODE = MEMORY
+
 # Relative location of the data directory.
 DATA_DIR = "./data"
 
 # Port to listen on.
 LOCAL_PORT = 3017
 
-# If the connection stalls for more than 2 seconds, give up.
-TIMEOUT = 2.0
+# If the Telnet connection stalls for more than 2 seconds, give up.
+TIMEOUT_TELNET = 2.0
+
+# Restrict all Telnet connections to come from this location.
+# Set to "" to allow connections from anywhere.
+CONNECTION_ORIGIN = "127.0.0.1"
 
 # Dictionary of all text objects.
 texts = {}
+
+# Berkeley Databases
+texts_db = None
+lasttime_db = None
 
 # Lock to prevent simultaneous changes to the texts dictionary.
 lock_texts = thread.allocate_lock()
@@ -65,17 +79,18 @@ class TextObj(mobwrite_core.TextObj):
   # Object properties:
   # .lock - Access control for writing to the text on this object.
   # .views - Count of views currently connected to this text.
+  # .lasttime - The last time that this text was modified.
 
   # Inerhited properties:
   # .name - The unique name for this text, e.g 'proposal'.
   # .text - The text itself.
   # .changed - Has the text changed since the last time it was saved.
-  # .lasttime - The last time that this text was modified.
 
   def __init__(self, *args, **kwargs):
     # Setup this object
     mobwrite_core.TextObj.__init__(self, *args, **kwargs)
     self.views = 0
+    self.lasttime = datetime.datetime.now()
     self.lock = thread.allocate_lock()
     self.load()
 
@@ -85,50 +100,107 @@ class TextObj(mobwrite_core.TextObj):
     global texts
     texts[self.name] = self
 
+  def setText(self, newText):
+    mobwrite_core.TextObj.setText(self, newText)
+    self.lasttime = datetime.datetime.now()
+
   def cleanup(self):
     # General cleanup task.
-    # Save to disk.
-    # Delete myself if I've been idle too long.
+    if self.views > 0:
+      return
+    terminate = False
     # Lock must be acquired to prevent simultaneous deletions.
     self.lock.acquire()
-    self.save()
-    if self.views <= 0:
-      logging.info("Unloading text: '%s'" % self.name)
+    if STORAGE_MODE == MEMORY:
+      if self.lasttime < datetime.datetime.now() - mobwrite_core.TIMEOUT_TEXT:
+        mobwrite_core.LOG.info("Expired text: '%s'" % self.name)
+        terminate = True
+    else:
+      # Delete myself from memory if there are no attached views.
+      mobwrite_core.LOG.info("Unloading text: '%s'" % self.name)
+      terminate = True
+
+    if terminate:
+      # Save to disk/database.
+      self.save()
+      # Terminate in-memory copy.
       global texts
       lock_texts.acquire()
       del texts[self.name]
       lock_texts.release()
     else:
+      if not self.changed:
+        self.save()
       self.lock.release()
 
+
   def load(self):
-    # Load the text (if present) from disk.
-    filename = "%s/%s.txt" % (DATA_DIR, urllib.quote(self.name))
-    if os.path.exists(filename):
-      try:
-        infile = open(filename, "r")
-        self.setText(infile.read().decode("utf-8"))
-        infile.close()
+    # Load the text object from non-volatile storage.
+    if STORAGE_MODE == FILE:
+      # Load the text (if present) from disk.
+      filename = "%s/%s.txt" % (DATA_DIR, urllib.quote(self.name, ""))
+      if os.path.exists(filename):
+        try:
+          infile = open(filename, "r")
+          self.setText(infile.read().decode("utf-8"))
+          infile.close()
+          self.changed = False
+          mobwrite_core.LOG.info("Loaded file: '%s'" % filename)
+        except:
+          mobwrite_core.LOG.critical("Can't read file: %s" % filename)
+      else:
+        self.setText(None)
         self.changed = False
-        logging.info("Loaded: '%s'" % filename)
-      except:
-        logging.critical("Can't read file: %s" % filename)
+
+    if STORAGE_MODE == BDB:
+      # Load the text (if present) from database.
+      if texts_db.has_key(self.name):
+        self.setText(texts_db[self.name].decode("utf-8"))
+        mobwrite_core.LOG.info("Loaded from DB: '%s'" % self.name)
+      else:
+        self.setText(None)
+      self.changed = False
+
 
   def save(self):
-    # Save the text to disk.
-    if not self.changed:
-      return
+    # Save the text object to non-volatile storage.
     # Lock must be acquired by the caller to prevent simultaneous saves.
     assert self.lock.locked(), "Can't save unless locked."
-    filename = "%s/%s.txt" % (DATA_DIR, urllib.quote(self.name))
-    try:
-      outfile = open(filename, "w")
-      outfile.write(self.text.encode("utf-8"))
-      outfile.close()
+
+    if STORAGE_MODE == FILE:
+      # Save the text to disk.
+      filename = "%s/%s.txt" % (DATA_DIR, urllib.quote(self.name, ''))
+      if self.text == None:
+        # Nullified text equates to no file.
+        if os.path.exists(filename):
+          try:
+            os.remove(filename)
+            mobwrite_core.LOG.info("Nullified file: '%s'" % filename)
+          except:
+            mobwrite_core.LOG.critical("Can't nullify file: %s" % filename)
+      else:
+        try:
+          outfile = open(filename, "w")
+          outfile.write(self.text.encode("utf-8"))
+          outfile.close()
+          self.changed = False
+          mobwrite_core.LOG.info("Saved file: '%s'" % filename)
+        except:
+          mobwrite_core.LOG.critical("Can't save file: %s" % filename)
+
+    if STORAGE_MODE == BDB:
+      # Save the text to database.
+      if self.text == None:
+        if lasttime_db.has_key(self.name):
+          del lasttime_db[self.name]
+        if texts_db.has_key(self.name):
+          del texts_db[self.name]
+          mobwrite_core.LOG.info("Nullified from DB: '%s'" % self.name)
+      else:
+        mobwrite_core.LOG.info("Saved to DB: '%s'" % self.name)
+        texts_db[self.name] = self.text.encode("utf-8")
+        lasttime_db[self.name] = str(int(time.time()))
       self.changed = False
-      logging.info("Saved: '%s'" % filename)
-    except:
-      logging.critical("Can't save file: %s" % filename)
 
 
 def fetch_textobj(name, view):
@@ -139,10 +211,10 @@ def fetch_textobj(name, view):
   lock_texts.acquire()
   if texts.has_key(name):
     textobj = texts[name]
-    logging.debug("Accepted text: '%s'" % name)
+    mobwrite_core.LOG.debug("Accepted text: '%s'" % name)
   else:
     textobj = TextObj(name=name)
-    logging.debug("Creating text: '%s'" % name)
+    mobwrite_core.LOG.debug("Creating text: '%s'" % name)
   textobj.views += 1
   lock_texts.release()
   return textobj
@@ -159,8 +231,7 @@ class ViewObj(mobwrite_core.ViewObj):
 
   # Object properties:
   # .edit_stack - List of unacknowledged edits sent to the client.
-  # .lasttime - The last time (in seconds since 1970) that a web connection
-  #     serviced this object.
+  # .lasttime - The last time that a web connection serviced this object.
   # .lock - Access control for writing to the text on this object.
   # .textobj - The shared text object being worked on.
 
@@ -178,7 +249,7 @@ class ViewObj(mobwrite_core.ViewObj):
     # Setup this object
     mobwrite_core.ViewObj.__init__(self, *args, **kwargs)
     self.edit_stack = []
-    self.lasttime = time.time()
+    self.lasttime = datetime.datetime.now()
     self.lock = thread.allocate_lock()
     self.textobj = fetch_textobj(self.filename, self)
 
@@ -188,17 +259,21 @@ class ViewObj(mobwrite_core.ViewObj):
     global views
     views[(self.username, self.filename)] = self
 
-
   def cleanup(self):
     # General cleanup task.
     # Delete myself if I've been idle too long.
     # Don't delete during a retrieval.
     lock_views.acquire()
-    if self.lasttime < time.time() - (15 * 60):
-      logging.info("Idle out: '%s %s'" % (self.username, self.filename))
+    if self.lasttime < datetime.datetime.now() - mobwrite_core.TIMEOUT_VIEW:
+      mobwrite_core.LOG.info("Idle out: '%s %s'" % (self.username, self.filename))
       global views
       del views[(self.username, self.filename)]
+      self.textobj.views -= 1
     lock_views.release()
+
+  def nullify(self):
+    self.lasttime = datetime.datetime.min
+    self.cleanup()
 
 
 def fetch_viewobj(username, filename):
@@ -209,14 +284,14 @@ def fetch_viewobj(username, filename):
   key = (username, filename)
   if views.has_key(key):
     viewobj = views[key]
-    viewobj.lasttime = time.time()
-    logging.debug("Accepting view: '%s %s'" % key)
+    viewobj.lasttime = datetime.datetime.now()
+    mobwrite_core.LOG.debug("Accepting view: '%s %s'" % key)
   else:
     if MAX_VIEWS != 0 and len(views) > MAX_VIEWS:
       # Overflow, stop hammering my server.
       return None
     viewobj = ViewObj(username=username, filename=filename)
-    logging.debug("Creating view: '%s %s'" % key)
+    mobwrite_core.LOG.debug("Creating view: '%s %s'" % key)
   lock_views.release()
   return viewobj
 
@@ -232,15 +307,14 @@ class BufferObj:
 
   # Object properties:
   # .name - The name (and size) of the buffer, e.g. 'alpha:12'
-  # .lasttime - The last time (in seconds since 1970) that a web connection
-  #     wrote to this object.
+  # .lasttime - The last time that a web connection wrote to this object.
   # .data - The contents of the buffer.
   # .lock - Access control for writing to the text on this object.
 
   def __init__(self, name):
     # Setup this object
     self.name = name
-    self.lasttime = time.time()
+    self.lasttime = datetime.datetime.now()
     self.data = None
     self.lock = thread.allocate_lock()
 
@@ -257,12 +331,12 @@ class BufferObj:
     for x in xrange(size - 1):
       array.append("\0")
     self.data = "".join(array)
-    logging.debug("Buffer initialized to %d slots: %s" % (size, self.name))
+    mobwrite_core.LOG.debug("Buffer initialized to %d slots: %s" % (size, self.name))
 
   def set(self, n, text):
     # Set the nth slot of this buffer with text.
     if self.data == None:
-      logging.warning("Unable to insert into undefined buffer")
+      mobwrite_core.LOG.warning("Unable to insert into undefined buffer")
       return
     # n is 1-based.
     n -= 1
@@ -270,10 +344,10 @@ class BufferObj:
     if n >= 0 and n < len(array):
       array[n] = text
       self.data = "\0".join(array)
-      logging.debug("Inserted into slot %d of a %d slot buffer: %s" %
+      mobwrite_core.LOG.debug("Inserted into slot %d of a %d slot buffer: %s" %
                     (n + 1, len(array), self.name))
     else:
-      logging.warning("Unable to insert \"%s\" into slot %d of a %d slot buffer: %s" %
+      mobwrite_core.LOG.warning("Unable to insert \"%s\" into slot %d of a %d slot buffer: %s" %
                       (text, n + 1, len(array), self.name))
 
   def completeText(self):
@@ -284,7 +358,7 @@ class BufferObj:
       text = self.data.replace("\0", "")
       text = urllib.unquote(text)
       # Delete this buffer.
-      self.lasttime = 0
+      self.lasttime = datetime.datetime.min
       self.cleanup()
       return text
     # Not complete yet.
@@ -292,11 +366,11 @@ class BufferObj:
 
   def cleanup(self):
     # General cleanup task.
-    # * Delete myself if I've been idle too long.
+    # Delete myself if I've been idle too long.
     # Don't delete during a retrieval.
     lock_buffers.acquire()
-    if self.lasttime < time.time() - (5 * 60):
-      logging.info("Expired buffer: '%s'" % self.name)
+    if self.lasttime < datetime.datetime.now() - mobwrite_core.TIMEOUT_BUFFER:
+      mobwrite_core.LOG.info("Expired buffer: '%s'" % self.name)
       global buffers
       del buffers[self.name]
     lock_buffers.release()
@@ -310,21 +384,23 @@ def fetch_bufferobj(name, size):
   lock_buffers.acquire()
   if buffers.has_key(name):
     bufferobj = buffers[name]
-    bufferobj.lasttime = time.time()
-    logging.debug("Found buffer: '%s'" % name)
+    bufferobj.lasttime = datetime.datetime.now()
+    mobwrite_core.LOG.debug("Found buffer: '%s'" % name)
   else:
     bufferobj = BufferObj(name)
     bufferobj.init(size)
-    logging.debug("Creating buffer: '%s'" % name)
+    mobwrite_core.LOG.debug("Creating buffer: '%s'" % name)
   lock_buffers.release()
   return bufferobj
 
 
 def cleanup_thread():
   # Every minute cleanup
+  if STORAGE_MODE == BDB:
+    import bsddb
+
   while True:
-    time.sleep(60)
-    logging.info("Running cleanup task.")
+    mobwrite_core.LOG.info("Running cleanup task.")
     for v in views.values():
       v.cleanup()
     for v in texts.values():
@@ -332,14 +408,39 @@ def cleanup_thread():
     for v in buffers.values():
       v.cleanup()
 
+    timeout = datetime.datetime.now() - mobwrite_core.TIMEOUT_TEXT
+    if STORAGE_MODE == FILE:
+      # Delete old files.
+      files = glob.glob("%s/*.txt" % DATA_DIR)
+      for filename in files:
+        if datetime.datetime.fromtimestamp(os.path.getmtime(filename)) < timeout:
+          os.unlink(filename)
+          mobwrite_core.LOG.info("Deleted file: '%s'" % filename)
+
+    if STORAGE_MODE == BDB:
+      # Delete old DB records.
+      # Can't delete an entry in a hash while iterating or else order is lost.
+      expired = []
+      for k, v in lasttime_db.iteritems():
+        if datetime.datetime.fromtimestamp(int(v)) < timeout:
+          expired.append(k)
+      for k in expired:
+        if texts_db.has_key(k):
+          del texts_db[k]
+        if lasttime_db.has_key(k):
+          del lasttime_db[k]
+        mobwrite_core.LOG.info("Deleted from DB: '%s'" % k)
+
+    time.sleep(60)
+
 
 class EchoRequestHandler(SocketServer.StreamRequestHandler):
 
   def handle(self):
-    self.connection.settimeout(TIMEOUT)
-    assert self.client_address[0] == "127.0.0.1", ("Connection refused from " +
-                                                   self.client_address[0])
-    logging.info("Connection accepted from " + self.client_address[0])
+    self.connection.settimeout(TIMEOUT_TELNET)
+    if CONNECTION_ORIGIN and self.client_address[0] != CONNECTION_ORIGIN:
+      raise("Connection refused from " + self.client_address[0])
+    mobwrite_core.LOG.info("Connection accepted from " + self.client_address[0])
 
     data = []
     # Read in all the lines.
@@ -348,7 +449,7 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
         line = self.rfile.readline()
       except:
         # Timeout.
-        logging.warning("Timeout on connection")
+        mobwrite_core.LOG.warning("Timeout on connection")
         break
       data.append(line)
       if not line.rstrip("\r\n"):
@@ -358,19 +459,19 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
 
 
     # Goodbye
-    logging.debug("Disconnecting.")
+    mobwrite_core.LOG.debug("Disconnecting.")
 
 
   def parseRequest(self, data):
     # Passing a Unicode string is an easy way to cause numerous subtle bugs.
     if type(data) != str:
-      logging.critical("parseRequest data type is %s" % type(data))
+      mobwrite_core.LOG.critical("parseRequest data type is %s" % type(data))
       return ""
     if not (data.endswith("\n\n") or data.endswith("\r\r") or
             data.endswith("\n\r\n\r") or data.endswith("\r\n\r\n")):
       # There must be a linefeed followed by a blank line.
       # Truncated data.  Abort.
-      logging.warning("Truncated data: '%s'" % data)
+      mobwrite_core.LOG.warning("Truncated data: '%s'" % data)
       return ""
 
     # Parse the lines
@@ -397,11 +498,11 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
           try:
             version = int(value[:div])
           except ValueError:
-            logging.warning("Invalid version number: %s" % line)
+            mobwrite_core.LOG.warning("Invalid version number: %s" % line)
             continue
           value = value[div + 1:]
         else:
-          logging.warning("Missing version number: %s" % line)
+          mobwrite_core.LOG.warning("Missing version number: %s" % line)
           continue
 
       if name == "b" or name == "B":
@@ -411,7 +512,7 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
           size = int(size)
           index = int(index)
         except ValueError:
-          logging.warning("Invalid buffer format: %s" % value)
+          mobwrite_core.LOG.warning("Invalid buffer format: %s" % value)
           continue
         # Retrieve or make a buffer.
         bufferobj = fetch_bufferobj(name, size)
@@ -420,7 +521,7 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
         # Check to see if the buffer is complete.  If so, execute it.
         text = bufferobj.completeText()
         if text:
-          logging.info("Executing buffer: %s" % bufferobj.name)
+          mobwrite_core.LOG.info("Executing buffer: %s" % bufferobj.name)
           # Duplicate last character.  Should be a line break.
           output.append(self.parseRequest(text + text[-1]))
           bufferobj.init(0)
@@ -436,6 +537,16 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
         # Remember the filename and version.
         filename = value
         server_version = version
+
+      elif name == "n" or name == "N":
+        # Nullify this file.
+        filename = value
+        if username and filename:
+          action = {}
+          action["username"] = username
+          action["filename"] = filename
+          action["mode"] = "null"
+          actions.append(action)
 
       else:
         # A delta or raw action.
@@ -480,15 +591,27 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
         viewobj.lock.acquire()
         delta_ok = True
         if viewobj == None:
-          logging.warning("Too many views connected at once.")
+          mobwrite_core.LOG.error("Too many views connected at once.")
           # Send back nothing.  Pretend the return packet was lost.
           return ""
         textobj = viewobj.textobj
 
+      if action["mode"] == "null":
+        # Nullify the text.
+        mobwrite_core.LOG.debug("Nullifying: '%s %s'" %
+            (viewobj.username, viewobj.filename))
+        textobj.lock.acquire()
+        textobj.setText(None)
+        textobj.lock.release()
+        viewobj.nullify();
+        viewobj.lock.release()
+        viewobj = None
+        continue
+
       if (action["server_version"] != viewobj.shadow_server_version and
           action["server_version"] == viewobj.backup_shadow_server_version):
         # Client did not receive the last response.  Roll back the shadow.
-        logging.warning("Rollback from shadow %d to backup shadow %d" %
+        mobwrite_core.LOG.warning("Rollback from shadow %d to backup shadow %d" %
             (viewobj.shadow_server_version, viewobj.backup_shadow_server_version))
         viewobj.shadow = viewobj.backup_shadow
         viewobj.shadow_server_version = viewobj.backup_shadow_server_version
@@ -506,7 +629,7 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
       if action["mode"] == "raw":
         # It's a raw text dump.
         data = urllib.unquote(action["data"]).decode("utf-8")
-        logging.info("Got %db raw text: '%s %s'" % 
+        mobwrite_core.LOG.info("Got %db raw text: '%s %s'" %
             (len(data), viewobj.username, viewobj.filename))
         delta_ok = True
         # First, update the client's shadow.
@@ -516,32 +639,33 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
         viewobj.backup_shadow = viewobj.shadow
         viewobj.backup_shadow_server_version = viewobj.shadow_server_version
         viewobj.edit_stack = []
-        if action["force"]:
+        if action["force"] or textobj.text == None:
           # Clobber the server's text.
           textobj.lock.acquire()
           if textobj.text != data:
             textobj.setText(data)
-            logging.debug("Overwrote content: '%s %s'" %
+            mobwrite_core.LOG.debug("Overwrote content: '%s %s'" %
                 (viewobj.username, viewobj.filename))
           textobj.lock.release()
+
       elif action["mode"] == "delta":
         # It's a delta.
-        logging.info("Got '%s' delta: '%s %s'" %
+        mobwrite_core.LOG.info("Got '%s' delta: '%s %s'" %
             (action["data"], viewobj.username, viewobj.filename))
         if action["server_version"] != viewobj.shadow_server_version:
           # Can't apply a delta on a mismatched shadow version.
           delta_ok = False
-          logging.warning("Shadow version mismatch: %d != %d" %
+          mobwrite_core.LOG.warning("Shadow version mismatch: %d != %d" %
               (action["server_version"], viewobj.shadow_server_version))
         elif action["client_version"] > viewobj.shadow_client_version:
           # Client has a version in the future?
           delta_ok = False
-          logging.warning("Future delta: %d > %d" %
+          mobwrite_core.LOG.warning("Future delta: %d > %d" %
               (action["client_version"], viewobj.shadow_client_version))
         elif action["client_version"] < viewobj.shadow_client_version:
           # We've already seen this diff.
           pass
-          logging.warning("Repeated delta: %d < %d" %
+          mobwrite_core.LOG.warning("Repeated delta: %d < %d" %
               (action["client_version"], viewobj.shadow_client_version))
         else:
           # Expand the delta into a diff using the client shadow.
@@ -550,7 +674,7 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
           except ValueError:
             diffs = None
             delta_ok = False
-            logging.warning("Delta failure, expected %d length: '%s %s'" %
+            mobwrite_core.LOG.warning("Delta failure, expected %d length: '%s %s'" %
                 (len(viewobj.shadow), viewobj.username, viewobj.filename))
           viewobj.shadow_client_version += 1
           if diffs != None:
@@ -564,18 +688,19 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
             textobj.lock.acquire()
             if textobj.text == None:
               # A view is sending a valid delta on a file we've never heard of.
-              textobj.setText("")
+              textobj.setText(viewobj.shadow)
+              action["force"] = False
             if action["force"]:
               # Clobber the server's text if a change was received.
               if len(diffs) > 1 or diffs[0][0] != mobwrite_core.DMP.DIFF_EQUAL:
                 mastertext = viewobj.shadow
-                logging.debug("Overwrote content: '%s %s'" %
+                mobwrite_core.LOG.debug("Overwrote content: '%s %s'" %
                     (viewobj.username, viewobj.filename))
               else:
                 mastertext = textobj.text
             else:
               (mastertext, results) = mobwrite_core.DMP.patch_apply(patches, textobj.text)
-              logging.debug("Patched (%s): '%s %s'" %
+              mobwrite_core.LOG.debug("Patched (%s): '%s %s'" %
                   (",".join(["%s" % (x) for x in results]),
                    viewobj.username, viewobj.filename))
             if textobj.text != mastertext:
@@ -616,14 +741,16 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
       textobj.lock.acquire()
       # Check that mastertext is still None after the lock.
       if textobj.text == None:
+        force = False
         if delta_ok:
           textobj.setText(viewobj.shadow)
-        else:
-          textobj.setText("")
       textobj.lock.release()
 
     mastertext = textobj.text
+
     if delta_ok:
+      if mastertext == None:
+        mastertext = ""
       # Create the diff between the view's text and the master text.
       diffs = mobwrite_core.DMP.diff_main(viewobj.shadow, mastertext)
       mobwrite_core.DMP.diff_cleanupEfficiency(diffs)
@@ -641,19 +768,27 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
         viewobj.edit_stack.append((viewobj.shadow_server_version,
             "d:%d:%s\n" % (viewobj.shadow_server_version, text)))
       viewobj.shadow_server_version += 1
-      logging.info("Sent '%s' delta: '%s %s'" %
+      mobwrite_core.LOG.info("Sent '%s' delta: '%s %s'" %
           (text, viewobj.username, viewobj.filename))
     else:
       # Error; server could not parse client's delta.
-      # Send a raw dump of the text.  Force overwrite of client.
+      # Send a raw dump of the text.
       viewobj.shadow_client_version += 1
-      text = mastertext
-      text = text.encode("utf-8")
-      text = urllib.quote(text, "!~*'();/?:@&=+$,# ")
-      viewobj.edit_stack.append((viewobj.shadow_server_version,
-          "R:%d:%s\n" % (viewobj.shadow_server_version, text)))
-      logging.info("Sent %db raw text: '%s %s'" %
-          (len(text), viewobj.username, viewobj.filename))
+      if mastertext == None:
+        mastertext = ""
+        viewobj.edit_stack.append((viewobj.shadow_server_version,
+            "r:%d:\n" % viewobj.shadow_server_version))
+        mobwrite_core.LOG.info("Sent empty raw text: '%s %s'" %
+            (viewobj.username, viewobj.filename))
+      else:
+        # Force overwrite of client.
+        text = mastertext
+        text = text.encode("utf-8")
+        text = urllib.quote(text, "!~*'();/?:@&=+$,# ")
+        viewobj.edit_stack.append((viewobj.shadow_server_version,
+            "R:%d:%s\n" % (viewobj.shadow_server_version, text)))
+        mobwrite_core.LOG.info("Sent %db raw text: '%s %s'" %
+            (len(text), viewobj.username, viewobj.filename))
 
     viewobj.shadow = mastertext
 
@@ -664,21 +799,28 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
 
 
 def main():
-  # Choose from: CRITICAL, ERROR, WARNING, INFO, DEBUG
-  logging.getLogger().setLevel(logging.DEBUG)
+  if STORAGE_MODE == BDB:
+    import bsddb
+    global texts_db, lasttime_db
+    texts_db = bsddb.hashopen(DATA_DIR + "/texts.db")
+    lasttime_db = bsddb.hashopen(DATA_DIR + "/lasttime.db")
 
   # Start up a thread that does timeouts and cleanup
   thread.start_new_thread(cleanup_thread, ())
 
-  logging.info("Listening on port %d..." % LOCAL_PORT)
+  mobwrite_core.LOG.info("Listening on port %d..." % LOCAL_PORT)
   s = SocketServer.ThreadingTCPServer(("", LOCAL_PORT), EchoRequestHandler)
   try:
     s.serve_forever()
   except KeyboardInterrupt:
-    logging.info("Shutting down.")
-    logging.shutdown()
+    mobwrite_core.LOG.info("Shutting down.")
     s.socket.close()
+    if STORAGE_MODE == BDB:
+      texts_db.close()
+      lasttime_db.close()
 
 
 if __name__ == "__main__":
+  mobwrite_core.logging.basicConfig()
   main()
+  mobwrite_core.logging.shutdown()

@@ -71,11 +71,25 @@ d:0:-1	+Hello world
     </ANSWER>
   </TEST>
 
-  <TEST NAME="Good delta on empty file">
+  <TEST NAME="Raw text on a null file">
+    <!-- An null file will accept whatever is assumed. -->
+    <QUESTION>
+u:user[RANDOM]
+f:0:unittest[RANDOM]
+r:1:Hello world
+
+    </QUESTION>
+    <ANSWER>
+F:1:unittest[RANDOM]
+d:0:=11
+
+    </ANSWER>
+  </TEST>
+
+  <TEST NAME="Good delta on null file">
     <QUESTION>
 U:user[RANDOM]
 F:0:unittest[RANDOM]
-R:0:
 d:0:+Hello world
 
     </QUESTION>
@@ -87,17 +101,16 @@ d:0:=11
     </ANSWER>
   </TEST>
 
-  <TEST NAME="Bad delta on empty file">
+  <TEST NAME="Bad delta on null file">
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
-R:0:
 d:0:-1
 
     </QUESTION>
     <ANSWER>
 F:1:unittest[RANDOM]
-R:0:
+r:0:
 
     </ANSWER>
   </TEST>
@@ -128,6 +141,122 @@ d:0:-5	+Goodbye	=5
     <ANSWER>
 F:1:unittest[RANDOM]
 R:0:Hello world
+
+    </ANSWER>
+  </TEST>
+
+  <TEST NAME="Delta nullified file">
+    <QUESTION>
+u:user[RANDOM]a
+f:0:unittest[RANDOM]
+r:1:Hello world
+
+    </QUESTION>
+    <ANSWER>
+F:1:unittest[RANDOM]
+d:0:=11
+
+    </ANSWER>
+    <QUESTION>
+u:user[RANDOM]b
+f:0:unittest[RANDOM]
+r:1:Hello world
+
+    </QUESTION>
+    <ANSWER>
+F:1:unittest[RANDOM]
+d:0:=11
+
+    </ANSWER>
+    <!-- Both a and b agree on 'Hello World'.  Now nullify -->
+    <QUESTION>
+u:user[RANDOM]a
+N:unittest[RANDOM]
+
+    </QUESTION>
+    <ANSWER>
+
+    </ANSWER>
+    <!-- c has no information. -->
+    <QUESTION>
+u:user[RANDOM]c
+f:0:unittest[RANDOM]
+d:0:=11
+
+    </QUESTION>
+    <ANSWER>
+F:1:unittest[RANDOM]
+r:0:
+
+    </ANSWER>
+    <!-- b still has a copy in its shadow. -->
+    <QUESTION>
+u:user[RANDOM]b
+f:1:unittest[RANDOM]
+d:1:=11
+
+    </QUESTION>
+    <ANSWER>
+F:2:unittest[RANDOM]
+d:1:=11
+
+    </ANSWER>
+  </TEST>
+
+  <TEST NAME="Force Delta nullified file">
+    <QUESTION>
+u:user[RANDOM]a
+f:0:unittest[RANDOM]
+r:1:Hello world
+
+    </QUESTION>
+    <ANSWER>
+F:1:unittest[RANDOM]
+d:0:=11
+
+    </ANSWER>
+    <QUESTION>
+u:user[RANDOM]b
+f:0:unittest[RANDOM]
+r:1:Hello world
+
+    </QUESTION>
+    <ANSWER>
+F:1:unittest[RANDOM]
+d:0:=11
+
+    </ANSWER>
+    <!-- Both a and b agree on 'Hello World'.  Now nullify -->
+    <QUESTION>
+u:user[RANDOM]a
+N:unittest[RANDOM]
+
+    </QUESTION>
+    <ANSWER>
+
+    </ANSWER>
+    <!-- c has no information. -->
+    <QUESTION>
+u:user[RANDOM]c
+f:0:unittest[RANDOM]
+D:0:=11
+
+    </QUESTION>
+    <ANSWER>
+F:1:unittest[RANDOM]
+r:0:
+
+    </ANSWER>
+    <!-- b still has a copy in its shadow. -->
+    <QUESTION>
+u:user[RANDOM]b
+f:1:unittest[RANDOM]
+D:1:=11
+
+    </QUESTION>
+    <ANSWER>
+F:2:unittest[RANDOM]
+d:1:=11
 
     </ANSWER>
   </TEST>
