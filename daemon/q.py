@@ -56,6 +56,8 @@ def handler(req):
     # Python CGI can't connect to Python daemon.
     inStr = '\n'
   else:
+    # Timeout if MobWrite daemon dosen't respond in 10 seconds.
+    s.settimeout(10.0)
     s.send(outStr)
     while 1:
       line = s.recv(1024)

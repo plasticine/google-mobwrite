@@ -32,7 +32,8 @@ Socket socket = null;
 try {
   // Connect to python mobwrite daemon
   socket = new Socket("localhost", 3017);
-  // Incoming data seems to be in "q"
+  // Timeout if MobWrite daemon dosen't respond in 10 seconds.
+  socket.setSoTimeout(10 * 1000);
   String data;
   if (request.getParameter("q") != null) {
     // Client sending a sync.  Requesting text return.

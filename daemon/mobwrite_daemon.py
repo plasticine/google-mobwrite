@@ -41,7 +41,7 @@ del sys.path[0]
 
 # Demo usage should limit the maximum number of connected views.
 # Set to 0 to disable limit.
-MAX_VIEWS = 1000
+MAX_VIEWS = 10000
 
 # How should data be stored.
 MEMORY = 0
@@ -288,10 +288,11 @@ def fetch_viewobj(username, filename):
     mobwrite_core.LOG.debug("Accepting view: '%s %s'" % key)
   else:
     if MAX_VIEWS != 0 and len(views) > MAX_VIEWS:
-      # Overflow, stop hammering my server.
-      return None
-    viewobj = ViewObj(username=username, filename=filename)
-    mobwrite_core.LOG.debug("Creating view: '%s %s'" % key)
+      viewobj = None
+      mobwrite_core.LOG.critical("Overflow: Can't create new view.")
+    else:
+      viewobj = ViewObj(username=username, filename=filename)
+      mobwrite_core.LOG.debug("Creating view: '%s %s'" % key)
   lock_views.release()
   return viewobj
 
@@ -588,12 +589,12 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
       # Fetch the requested view object.
       if not viewobj:
         viewobj = fetch_viewobj(action["username"], action["filename"])
-        viewobj.lock.acquire()
-        delta_ok = True
         if viewobj == None:
-          mobwrite_core.LOG.error("Too many views connected at once.")
+          # Too many views connected at once.
           # Send back nothing.  Pretend the return packet was lost.
           return ""
+        delta_ok = True
+        viewobj.lock.acquire()
         textobj = viewobj.textobj
 
       if action["mode"] == "null":
