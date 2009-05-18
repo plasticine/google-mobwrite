@@ -146,11 +146,19 @@ mobwrite.nullifyAll = false;
 
 
 /**
- * Track whether something changed client-side or server-side in each sync.
+ * Track whether something changed client-side in each sync.
  * @type {boolean}
  * @private
  */
-mobwrite.syncChange_ = false;
+mobwrite.clientChange_ = false;
+
+
+/**
+ * Track whether something changed server-side in each sync.
+ * @type {boolean}
+ * @private
+ */
+mobwrite.serverChange_ = false;
 
 
 /**
@@ -355,7 +363,7 @@ mobwrite.shareObj.prototype.syncText = function() {
     var action = (this.mergeChanges ? 'd:' : 'D:') + this.clientVersion + ':' +
                  this.dmp.diff_toDelta(diffs);
     if (diffs.length != 1 || diffs[0][0] != DIFF_EQUAL) {
-      mobwrite.syncChange_ = true;
+      mobwrite.clientChange_ = true;
     }
     // Append the action to the edit stack.
     this.editStack.push([this.clientVersion, action]);
@@ -391,8 +399,8 @@ mobwrite.shareObj.prototype.syncText = function() {
  * @private
  */
 mobwrite.syncRun1_ = function() {
-  // Initialize syncChange_, to be checked at the end of syncRun2_.
-  mobwrite.syncChange_ = false;
+  // Initialize clientChange_, to be checked at the end of syncRun2_.
+  mobwrite.clientChange_ = false;
   var data = [];
   data[0] = 'u:' + mobwrite.syncUsername + '\n';
   var empty = true;
@@ -507,6 +515,8 @@ mobwrite.callback = function(text) {
  * @private
  */
 mobwrite.syncRun2_ = function(text) {
+  // Initialize serverChange_, to be checked at the end of syncRun2_.
+  mobwrite.serverChange_ = false;
   if (mobwrite.debug) {
     window.console.info('FROM server:\n' + text);
   }
@@ -603,7 +613,7 @@ mobwrite.syncRun2_ = function(text) {
           file.setClientText(file.shadowText);
         }
         // Server-side activity.
-        mobwrite.syncChange_ = true;
+        mobwrite.serverChange_ = true;
       }
     } else if (name == 'D' || name == 'd') {
       // The server offers a compressed delta of changes to be applied.
@@ -663,14 +673,32 @@ mobwrite.syncRun2_ = function(text) {
               file.patchClientText(patches);
             }
             // Server-side activity.
-            mobwrite.syncChange_ = true;
+            mobwrite.serverChange_ = true;
           }
         }
       }
     }
   }
 
-  if (mobwrite.syncChange_) {
+  mobwrite.computeSyncInterval_();
+
+  // Ensure that there is only one sync task.
+  window.clearTimeout(mobwrite.syncRunPid_);
+  // Schedule the next sync.
+  mobwrite.syncRunPid_ =
+      window.setTimeout(mobwrite.syncRun1_, mobwrite.syncInterval);
+  // Terminate the watchdog task, everything's ok.
+  window.clearTimeout(mobwrite.syncKillPid_);
+  mobwrite.syncKillPid_ = null;
+};
+
+
+/**
+ * Compute how long to wait until next synchronization.
+ * @private
+ */
+mobwrite.computeSyncInterval_ = function() {
+  if (mobwrite.clientChange_ || mobwrite.serverChange_) {
     // Activity (client-side or server-side).  Cut the ping interval.
     mobwrite.syncInterval /= 2;
   } else {
@@ -682,14 +710,6 @@ mobwrite.syncRun2_ = function(text) {
       Math.max(mobwrite.minSyncInterval, mobwrite.syncInterval);
   mobwrite.syncInterval =
       Math.min(mobwrite.maxSyncInterval, mobwrite.syncInterval);
-  // Ensure that there is only one sync task.
-  window.clearTimeout(mobwrite.syncRunPid_);
-  // Schedule the next sync.
-  mobwrite.syncRunPid_ =
-      window.setTimeout(mobwrite.syncRun1_, mobwrite.syncInterval);
-  // Terminate the watchdog task, everything's ok.
-  window.clearTimeout(mobwrite.syncKillPid_);
-  mobwrite.syncKillPid_ = null;
 };
 
 
