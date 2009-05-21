@@ -265,7 +265,7 @@ class ViewObj(mobwrite_core.ViewObj):
     # Don't delete during a retrieval.
     lock_views.acquire()
     if self.lasttime < datetime.datetime.now() - mobwrite_core.TIMEOUT_VIEW:
-      mobwrite_core.LOG.info("Idle out: '%s %s'" % (self.username, self.filename))
+      mobwrite_core.LOG.info("Idle out: '%s@%s'" % (self.username, self.filename))
       global views
       del views[(self.username, self.filename)]
       self.textobj.views -= 1
@@ -285,14 +285,14 @@ def fetch_viewobj(username, filename):
   if views.has_key(key):
     viewobj = views[key]
     viewobj.lasttime = datetime.datetime.now()
-    mobwrite_core.LOG.debug("Accepting view: '%s %s'" % key)
+    mobwrite_core.LOG.debug("Accepting view: '%s@%s'" % key)
   else:
     if MAX_VIEWS != 0 and len(views) > MAX_VIEWS:
       viewobj = None
       mobwrite_core.LOG.critical("Overflow: Can't create new view.")
     else:
       viewobj = ViewObj(username=username, filename=filename)
-      mobwrite_core.LOG.debug("Creating view: '%s %s'" % key)
+      mobwrite_core.LOG.debug("Creating view: '%s@%s'" % key)
   lock_views.release()
   return viewobj
 
@@ -599,7 +599,7 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
 
       if action["mode"] == "null":
         # Nullify the text.
-        mobwrite_core.LOG.debug("Nullifying: '%s %s'" %
+        mobwrite_core.LOG.debug("Nullifying: '%s@%s'" %
             (viewobj.username, viewobj.filename))
         textobj.lock.acquire()
         textobj.setText(None)
@@ -630,7 +630,7 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
       if action["mode"] == "raw":
         # It's a raw text dump.
         data = urllib.unquote(action["data"]).decode("utf-8")
-        mobwrite_core.LOG.info("Got %db raw text: '%s %s'" %
+        mobwrite_core.LOG.info("Got %db raw text: '%s@%s'" %
             (len(data), viewobj.username, viewobj.filename))
         delta_ok = True
         # First, update the client's shadow.
@@ -645,13 +645,13 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
           textobj.lock.acquire()
           if textobj.text != data:
             textobj.setText(data)
-            mobwrite_core.LOG.debug("Overwrote content: '%s %s'" %
+            mobwrite_core.LOG.debug("Overwrote content: '%s@%s'" %
                 (viewobj.username, viewobj.filename))
           textobj.lock.release()
 
       elif action["mode"] == "delta":
         # It's a delta.
-        mobwrite_core.LOG.info("Got '%s' delta: '%s %s'" %
+        mobwrite_core.LOG.info("Got '%s' delta: '%s@%s'" %
             (action["data"], viewobj.username, viewobj.filename))
         if action["server_version"] != viewobj.shadow_server_version:
           # Can't apply a delta on a mismatched shadow version.
@@ -675,7 +675,7 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
           except ValueError:
             diffs = None
             delta_ok = False
-            mobwrite_core.LOG.warning("Delta failure, expected %d length: '%s %s'" %
+            mobwrite_core.LOG.warning("Delta failure, expected %d length: '%s@%s'" %
                 (len(viewobj.shadow), viewobj.username, viewobj.filename))
           viewobj.shadow_client_version += 1
           if diffs != None:
@@ -695,13 +695,13 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
               # Clobber the server's text if a change was received.
               if len(diffs) > 1 or diffs[0][0] != mobwrite_core.DMP.DIFF_EQUAL:
                 mastertext = viewobj.shadow
-                mobwrite_core.LOG.debug("Overwrote content: '%s %s'" %
+                mobwrite_core.LOG.debug("Overwrote content: '%s@%s'" %
                     (viewobj.username, viewobj.filename))
               else:
                 mastertext = textobj.text
             else:
               (mastertext, results) = mobwrite_core.DMP.patch_apply(patches, textobj.text)
-              mobwrite_core.LOG.debug("Patched (%s): '%s %s'" %
+              mobwrite_core.LOG.debug("Patched (%s): '%s@%s'" %
                   (",".join(["%s" % (x) for x in results]),
                    viewobj.username, viewobj.filename))
             if textobj.text != mastertext:
@@ -769,7 +769,7 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
         viewobj.edit_stack.append((viewobj.shadow_server_version,
             "d:%d:%s\n" % (viewobj.shadow_server_version, text)))
       viewobj.shadow_server_version += 1
-      mobwrite_core.LOG.info("Sent '%s' delta: '%s %s'" %
+      mobwrite_core.LOG.info("Sent '%s' delta: '%s@%s'" %
           (text, viewobj.username, viewobj.filename))
     else:
       # Error; server could not parse client's delta.
@@ -779,7 +779,7 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
         mastertext = ""
         viewobj.edit_stack.append((viewobj.shadow_server_version,
             "r:%d:\n" % viewobj.shadow_server_version))
-        mobwrite_core.LOG.info("Sent empty raw text: '%s %s'" %
+        mobwrite_core.LOG.info("Sent empty raw text: '%s@%s'" %
             (viewobj.username, viewobj.filename))
       else:
         # Force overwrite of client.
@@ -788,7 +788,7 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
         text = urllib.quote(text, "!~*'();/?:@&=+$,# ")
         viewobj.edit_stack.append((viewobj.shadow_server_version,
             "R:%d:%s\n" % (viewobj.shadow_server_version, text)))
-        mobwrite_core.LOG.info("Sent %db raw text: '%s %s'" %
+        mobwrite_core.LOG.info("Sent %db raw text: '%s@%s'" %
             (len(text), viewobj.username, viewobj.filename))
 
     viewobj.shadow = mastertext

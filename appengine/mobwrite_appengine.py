@@ -137,7 +137,7 @@ def fetchUserViews(username):
   # Convert list to a hash, and also load the associated text objects.
   views = {}
   for viewobj in query:
-    mobwrite_core.LOG.debug("Loaded %db ViewObj: '%s %s'" %
+    mobwrite_core.LOG.debug("Loaded %db ViewObj: '%s@%s'" %
         (len(viewobj.shadow), viewobj.username, viewobj.filename))
     views[viewobj.filename] = viewobj
   if len(views) == 0:
@@ -199,7 +199,7 @@ def cleanup():
     limit = datetime.datetime.now() - mobwrite_core.TIMEOUT_VIEW
     query = db.GqlQuery("SELECT * FROM ViewObj WHERE lasttime < :1", limit)
     for datum in query:
-      print "Deleting '%s %s' ViewObj" % (datum.username, datum.filename)
+      print "Deleting '%s@%s' ViewObj" % (datum.username, datum.filename)
       datum.delete()
 
     # Delete any text which hasn't been written to in an hour.
@@ -355,7 +355,7 @@ def doActions(actions, echo_username):
         viewobj = user_views[filename]
       else:
         viewobj = ViewObj(username=username, filename=filename)
-        mobwrite_core.LOG.debug("Created new ViewObj: '%s %s'" %
+        mobwrite_core.LOG.debug("Created new ViewObj: '%s@%s'" %
             (viewobj.username, viewobj.filename))
         viewobj.shadow = u""
         viewobj.backup_shadow = u""
@@ -367,7 +367,7 @@ def doActions(actions, echo_username):
 
     if action["mode"] == "null":
       # Nullify the text.
-      mobwrite_core.LOG.debug("Nullifying: '%s %s'" %
+      mobwrite_core.LOG.debug("Nullifying: '%s@%s'" %
           (viewobj.username, viewobj.filename))
       textobj.setText(None)
       viewobj.nullify();
@@ -397,7 +397,7 @@ def doActions(actions, echo_username):
     if action["mode"] == "raw":
       # It's a raw text dump.
       data = urllib.unquote(action["data"]).decode("utf-8")
-      mobwrite_core.LOG.info("Got %db raw text: '%s %s'" %
+      mobwrite_core.LOG.info("Got %db raw text: '%s@%s'" %
           (len(data), viewobj.username, viewobj.filename))
       delta_ok = True
       # First, update the client's shadow.
@@ -411,11 +411,11 @@ def doActions(actions, echo_username):
         # Clobber the server's text.
         if textobj.text != data:
           textobj.setText(data)
-          mobwrite_core.LOG.debug("Overwrote content: '%s %s'" %
+          mobwrite_core.LOG.debug("Overwrote content: '%s@%s'" %
               (viewobj.username, viewobj.filename))
     elif action["mode"] == "delta":
       # It's a delta.
-      mobwrite_core.LOG.info("Got '%s' delta: '%s %s'" %
+      mobwrite_core.LOG.info("Got '%s' delta: '%s@%s'" %
           (action["data"], viewobj.username, viewobj.filename))
       if action["server_version"] != viewobj.shadow_server_version:
         # Can't apply a delta on a mismatched shadow version.
@@ -439,7 +439,7 @@ def doActions(actions, echo_username):
         except ValueError:
           diffs = None
           delta_ok = False
-          mobwrite_core.LOG.warning("Delta failure, expected %d length: '%s %s'" %
+          mobwrite_core.LOG.warning("Delta failure, expected %d length: '%s@%s'" %
               (len(viewobj.shadow), viewobj.username, viewobj.filename))
         viewobj.shadow_client_version += 1
         if diffs != None:
@@ -458,13 +458,13 @@ def doActions(actions, echo_username):
             # Clobber the server's text if a change was received.
             if len(diffs) > 1 or diffs[0][0] != mobwrite_core.DMP.DIFF_EQUAL:
               mastertext = viewobj.shadow
-              mobwrite_core.LOG.debug("Overwrote content: '%s %s'" %
+              mobwrite_core.LOG.debug("Overwrote content: '%s@%s'" %
                   (viewobj.username, viewobj.filename))
             else:
               mastertext = textobj.text
           else:
             (mastertext, results) = mobwrite_core.DMP.patch_apply(patches, textobj.text)
-            mobwrite_core.LOG.debug("Patched (%s): '%s %s'" %
+            mobwrite_core.LOG.debug("Patched (%s): '%s@%s'" %
                 (",".join(["%s" % (x) for x in results]),
                  viewobj.username, viewobj.filename))
           if textobj.text != mastertext:
@@ -537,7 +537,7 @@ def generateDiffs(viewobj, last_username, last_filename,
       stack.append((viewobj.shadow_server_version,
           "d:%d:%s\n" % (viewobj.shadow_server_version, text)))
     viewobj.shadow_server_version += 1
-    mobwrite_core.LOG.info("Sent '%s' delta: '%s %s'" %
+    mobwrite_core.LOG.info("Sent '%s' delta: '%s@%s'" %
         (text, viewobj.username, viewobj.filename))
   else:
     # Error; server could not parse client's delta.
@@ -547,7 +547,7 @@ def generateDiffs(viewobj, last_username, last_filename,
       mastertext = ""
       stack.append((viewobj.shadow_server_version,
           "r:%d:\n" % viewobj.shadow_server_version))
-      mobwrite_core.LOG.info("Sent empty raw text: '%s %s'" %
+      mobwrite_core.LOG.info("Sent empty raw text: '%s@%s'" %
           (viewobj.username, viewobj.filename))
     else:
       # Force overwrite of client.
@@ -556,7 +556,7 @@ def generateDiffs(viewobj, last_username, last_filename,
       text = urllib.quote(text, "!~*'();/?:@&=+$,# ")
       stack.append((viewobj.shadow_server_version,
           "R:%d:%s\n" % (viewobj.shadow_server_version, text)))
-      mobwrite_core.LOG.info("Sent %db raw text: '%s %s'" %
+      mobwrite_core.LOG.info("Sent %db raw text: '%s@%s'" %
           (len(text), viewobj.username, viewobj.filename))
 
   viewobj.shadow = mastertext
@@ -564,7 +564,7 @@ def generateDiffs(viewobj, last_username, last_filename,
   for edit in stack:
     output.append(edit[1])
 
-  mobwrite_core.LOG.debug("Saving %db ViewObj: '%s %s'" %
+  mobwrite_core.LOG.debug("Saving %db ViewObj: '%s@%s'" %
       (len(viewobj.shadow), viewobj.username, viewobj.filename))
   viewobj.edit_stack = stackToString(stack)
   viewobj.put()

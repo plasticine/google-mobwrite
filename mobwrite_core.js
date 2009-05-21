@@ -358,16 +358,20 @@ mobwrite.shareObj.prototype.syncText = function() {
       this.dmp.diff_cleanupSemantic(diffs);
       this.dmp.diff_cleanupEfficiency(diffs);
     }
-    this.onSentDiff(diffs);
-    this.shadowText = clientText;
-    var action = (this.mergeChanges ? 'd:' : 'D:') + this.clientVersion + ':' +
-                 this.dmp.diff_toDelta(diffs);
-    if (diffs.length != 1 || diffs[0][0] != DIFF_EQUAL) {
+    var changed =  diffs.length != 1 || diffs[0][0] != DIFF_EQUAL;
+    if (changed) {
       mobwrite.clientChange_ = true;
+      this.shadowText = clientText;
     }
-    // Append the action to the edit stack.
-    this.editStack.push([this.clientVersion, action]);
-    this.clientVersion++;
+    // Don't bother appending a no-change diff onto the stack if the stack
+    // already contains something.
+    if (changed || !this.editStack.length) {
+      var action = (this.mergeChanges ? 'd:' : 'D:') + this.clientVersion +
+          ':' + this.dmp.diff_toDelta(diffs);
+      this.editStack.push([this.clientVersion, action]);
+      this.clientVersion++;
+      this.onSentDiff(diffs);
+    }
   } else {
     // The last delta postback from the server to this shareObj didn't match.
     // Send a full text dump to get back in sync. This will result in any
@@ -698,14 +702,23 @@ mobwrite.syncRun2_ = function(text) {
  * @private
  */
 mobwrite.computeSyncInterval_ = function() {
-  if (mobwrite.clientChange_ || mobwrite.serverChange_) {
-    // Activity (client-side or server-side).  Cut the ping interval.
-    mobwrite.syncInterval /= 2;
-  } else {
-    // Let the ping interval creep up.
-    mobwrite.syncInterval += 1000;
+  var range = mobwrite.maxSyncInterval - mobwrite.minSyncInterval;
+  if (mobwrite.clientChange_) {
+    // Client-side activity.
+    // Cut the sync interval by 40% of the min-max range.
+    mobwrite.syncInterval -= range * 0.4;
   }
-  // Keep the syncs constrained between 1 and 10 seconds.
+  if (mobwrite.serverChange_) {
+    // Server-side activity.
+    // Cut the sync interval by 20% of the min-max range.
+    mobwrite.syncInterval -= range * 0.2;
+  }
+  if (!mobwrite.clientChange_ && !mobwrite.serverChange_) {
+    // No activity.
+    // Let the sync interval creep up by 10% of the min-max range.
+    mobwrite.syncInterval += range * 0.1;
+  }
+  // Keep the sync interval constrained between min and max.
   mobwrite.syncInterval =
       Math.max(mobwrite.minSyncInterval, mobwrite.syncInterval);
   mobwrite.syncInterval =

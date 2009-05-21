@@ -126,6 +126,47 @@
       }
       
 
+      function testComputeSyncInterval() {
+        // Check 10% growth when no change.
+        mobwrite.serverChange_ = false;
+        mobwrite.clientChange_ = false;
+        mobwrite.syncInterval = 185;
+        mobwrite.minSyncInterval = 100;
+        mobwrite.maxSyncInterval = 200;
+        mobwrite.computeSyncInterval_();
+        assertEquals(195, mobwrite.syncInterval);
+
+        // Check max cap.
+        mobwrite.computeSyncInterval_();
+        assertEquals(200, mobwrite.syncInterval);
+
+        // Check 20% drop when server changes.
+        mobwrite.serverChange_ = true;
+        mobwrite.clientChange_ = false;
+        mobwrite.syncInterval = 175;
+        mobwrite.computeSyncInterval_();
+        assertEquals(155, mobwrite.syncInterval);
+
+        // Check 40% drop when client changes.
+        mobwrite.serverChange_ = false;
+        mobwrite.clientChange_ = true;
+        mobwrite.syncInterval = 175;
+        mobwrite.computeSyncInterval_();
+        assertEquals(135, mobwrite.syncInterval);
+
+        // Check 60% drop when both server and client changes.
+        mobwrite.serverChange_ = true;
+        mobwrite.clientChange_ = true;
+        mobwrite.syncInterval = 175;
+        mobwrite.computeSyncInterval_();
+        assertEquals(115, mobwrite.syncInterval);
+
+        // Check min cap.
+        mobwrite.computeSyncInterval_();
+        assertEquals(100, mobwrite.syncInterval);
+      }
+      
+
       // FORM TEST FUNCTIONS
 
 
@@ -307,8 +348,9 @@
 
 
       function runTests() {
-        tests = ['testUniqueId', 'testValidNode', 'testShareHandler',
-            'testNormalizeLinebreaks', 'testCursor', 'testMergeType'];
+        tests = ['testUniqueId', 'testComputeSyncInterval', 'testValidNode',
+            'testShareHandler', 'testNormalizeLinebreaks', 'testCursor',
+            'testMergeType'];
         for (var x = 0; x < tests.length; x++) {
           document.write('<H3>' + tests[x] + ':</H3>');
           eval(tests[x] + '()');
