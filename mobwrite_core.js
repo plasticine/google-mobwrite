@@ -358,7 +358,7 @@ mobwrite.shareObj.prototype.syncText = function() {
       this.dmp.diff_cleanupSemantic(diffs);
       this.dmp.diff_cleanupEfficiency(diffs);
     }
-    var changed =  diffs.length != 1 || diffs[0][0] != DIFF_EQUAL;
+    var changed = diffs.length != 1 || diffs[0][0] != DIFF_EQUAL;
     if (changed) {
       mobwrite.clientChange_ = true;
       this.shadowText = clientText;

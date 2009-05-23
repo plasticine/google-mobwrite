@@ -729,24 +729,13 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
   def generateDiffs(self, viewobj, last_username, last_filename,
                     echo_username, force, delta_ok):
     output = []
-    textobj = viewobj.textobj
     if (echo_username and last_username != viewobj.username):
       output.append("u:%s\n" %  viewobj.username)
     if (last_filename != viewobj.filename or last_username != viewobj.username):
       output.append("F:%d:%s\n" %
           (viewobj.shadow_client_version, viewobj.filename))
 
-    # Accept this view's version of the text if we've never heard of this
-    # text before.
-    if textobj.text == None:
-      textobj.lock.acquire()
-      # Check that mastertext is still None after the lock.
-      if textobj.text == None:
-        force = False
-        if delta_ok:
-          textobj.setText(viewobj.shadow)
-      textobj.lock.release()
-
+    textobj = viewobj.textobj
     mastertext = textobj.text
 
     if delta_ok:

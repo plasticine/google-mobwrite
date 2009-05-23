@@ -23,7 +23,7 @@ rm -r mobwrite/
 echo "Building mobwrite_appengine.zip"
 mkdir mobwrite
 cp README_appengine mobwrite/
-cp appengine/app.yaml appengine/index.yaml appengine/index_redirect.py appengine/mobwrite_appengine.py mobwrite/
+cp appengine/app.yaml appengine/cron.yaml appengine/index.yaml appengine/index_redirect.py appengine/mobwrite_appengine.py mobwrite/
 mkdir mobwrite/lib
 cp lib/mobwrite_core.py lib/diff_match_patch.py mobwrite/lib/
 mkdir mobwrite/static

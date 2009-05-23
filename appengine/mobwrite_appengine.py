@@ -75,18 +75,12 @@ class TextObj(mobwrite_core.TextObj, db.Model):
 
 def fetchText(name):
   filename = TextObj.safe_name(name)
-  key = db.Key.from_path(TextObj.kind(), filename)
-  textobj = db.get(key)
-  # Should be zero or one result.
-  if textobj != None:
-    if textobj.text == None:
-      mobwrite_core.LOG.debug("Loaded null TextObj: '%s'" % filename)
-    else:
-      mobwrite_core.LOG.debug("Loaded %db TextObj: '%s'" %
-          (len(textobj.text), filename))
+  textobj = TextObj.get_or_insert(filename)
+  if textobj.text == None:
+    mobwrite_core.LOG.debug("Loaded null TextObj: '%s'" % filename)
   else:
-    textobj = TextObj(key_name=filename)
-    mobwrite_core.LOG.debug("Creating new TextObj: '%s'" % filename)
+    mobwrite_core.LOG.debug("Loaded %db TextObj: '%s'" %
+        (len(textobj.text), filename))
   return textobj
 
 
@@ -132,9 +126,12 @@ class ViewObj(mobwrite_core.ViewObj, db.Model):
     mobwrite_core.LOG.debug("Nullified ViewObj: '%s'" % self.key().name())
     self.delete()
 
+  def fetchTextObj(self):
+    return self.textobj
+
 def fetchUserViews(username):
   query = db.GqlQuery("SELECT * FROM ViewObj WHERE username = :1", username)
-  # Convert list to a hash, and also load the associated text objects.
+  # Convert list to a hash.
   views = {}
   for viewobj in query:
     mobwrite_core.LOG.debug("Loaded %db ViewObj: '%s@%s'" %
@@ -193,28 +190,29 @@ def getFromBuffer(name, size):
 
 
 def cleanup():
+  def cleanTable(name, limit):
+    query = db.GqlQuery("SELECT * FROM %s WHERE lasttime < :1" % name, limit)
+    while 1:
+      results = query.fetch(maxlimit)
+      print "Deleting %d %s(s)." % (len(results), name)
+      db.delete(results)
+      if len(results) != maxlimit:
+        break
+  
   mobwrite_core.LOG.info("Cleaning database")
+  maxlimit = 1000
   try:
-    # Delete any view which hasn't been written to in half an hour.
+    # Delete any view which hasn't been written to in a while.
     limit = datetime.datetime.now() - mobwrite_core.TIMEOUT_VIEW
-    query = db.GqlQuery("SELECT * FROM ViewObj WHERE lasttime < :1", limit)
-    for datum in query:
-      print "Deleting '%s@%s' ViewObj" % (datum.username, datum.filename)
-      datum.delete()
+    cleanTable("ViewObj", limit)
 
-    # Delete any text which hasn't been written to in an hour.
+    # Delete any text which hasn't been written to in a while.
     limit = datetime.datetime.now() - mobwrite_core.TIMEOUT_TEXT
-    query = db.GqlQuery("SELECT * FROM TextObj WHERE lasttime < :1", limit)
-    for datum in query:
-      print "Deleting '%s' TextObj" % datum.key().id_or_name()
-      datum.delete()
+    cleanTable("TextObj", limit)
 
-    # Delete any buffer which hasn't been written to in a quarter of an hour.
+    # Delete any buffer which hasn't been written to in a while.
     limit = datetime.datetime.now() - mobwrite_core.TIMEOUT_BUFFER
-    query = db.GqlQuery("SELECT * FROM BufferObj WHERE lasttime < :1", limit)
-    for datum in query:
-      print "Deleting '%s' BufferObj" % datum.key().id_or_name()
-      datum.delete()
+    cleanTable("BufferObj", limit)
 
     print "Database clean."
     mobwrite_core.LOG.info("Database clean")
@@ -363,12 +361,13 @@ def doActions(actions, echo_username):
         viewobj.textobj = fetchText(filename)
         user_views[filename] = viewobj
       delta_ok = True
-      textobj = viewobj.textobj
 
     if action["mode"] == "null":
       # Nullify the text.
       mobwrite_core.LOG.debug("Nullifying: '%s@%s'" %
           (viewobj.username, viewobj.filename))
+      # Textobj transaction not needed; just a set.
+      textobj = viewobj.fetchTextObj()
       textobj.setText(None)
       viewobj.nullify();
       viewobj = None
@@ -407,6 +406,9 @@ def doActions(actions, echo_username):
       viewobj.backup_shadow = viewobj.shadow
       viewobj.backup_shadow_server_version = viewobj.shadow_server_version
       viewobj.edit_stack = ""
+      # Textobj transaction not needed; in a collision here data-loss is
+      # inevitable anyway.
+      textobj = viewobj.fetchTextObj()
       if action["force"] or textobj.text == None:
         # Clobber the server's text.
         if textobj.text != data:
@@ -450,6 +452,7 @@ def doActions(actions, echo_username):
           viewobj.backup_shadow = viewobj.shadow
           viewobj.backup_shadow_server_version = viewobj.shadow_server_version
           # Second, deal with the server's text.
+          textobj = viewobj.fetchTextObj()
           if textobj.text == None:
             # A view is sending a valid delta on a file we've never heard of.
             textobj.setText(viewobj.shadow)
@@ -469,6 +472,7 @@ def doActions(actions, echo_username):
                  viewobj.username, viewobj.filename))
           if textobj.text != mastertext:
             textobj.setText(mastertext)
+
           if (textobj.lasttime + mobwrite_core.TIMEOUT_TEXT <
               viewobj.lasttime + mobwrite_core.TIMEOUT_VIEW):
             # Text object will expire before this view.  Bump the database.
@@ -500,19 +504,13 @@ def doActions(actions, echo_username):
 def generateDiffs(viewobj, last_username, last_filename,
                   echo_username, force, delta_ok):
   output = []
-  textobj = viewobj.textobj
   if (echo_username and last_username != viewobj.username):
     output.append("u:%s\n" %  viewobj.username)
   if (last_filename != viewobj.filename or last_username != viewobj.username):
     output.append("F:%d:%s\n" % (viewobj.shadow_client_version, viewobj.filename))
 
-  # Accept this view's version of the text if we've never heard of this
-  # text before.
-  if textobj.text == None:
-    force = False
-    if delta_ok:
-      textobj.setText(viewobj.shadow)
-
+  # Textobj transaction not needed; just a get, stale info is ok.
+  textobj = viewobj.fetchTextObj()
   mastertext = textobj.text
 
   stack = stringToStack(viewobj.edit_stack)
