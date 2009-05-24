@@ -1,3 +1,7 @@
+#!/bin/bash
+
+# Creates zip files for both versions of the mobwrite server.
+
 echo "Building mobwrite_daemon.zip"
 mkdir mobwrite
 cp README_daemon mobwrite/
@@ -16,7 +20,7 @@ mkdir mobwrite/tests
 cp tests/index.html tests/client.html tests/q.html tests/server.html tests/server.xml mobwrite/tests/
 mkdir mobwrite/tools
 cp tools/download.py tools/upload.py tools/mobwritelib.py tools/sync.py tools/demo.cfg mobwrite/tools/
-zip -r mobwrite mobwrite
+zip -q -r mobwrite mobwrite
 mv mobwrite.zip mobwrite_daemon.zip
 rm -r mobwrite/
 
@@ -36,6 +40,6 @@ mkdir mobwrite/static/tests
 cp tests/index.html tests/client.html tests/q.html tests/server.html tests/server.xml mobwrite/static/tests/
 mkdir mobwrite/tools
 cp tools/download.py tools/upload.py tools/mobwritelib.py tools/sync.py tools/demo.cfg mobwrite/tools/
-zip -r mobwrite mobwrite
+zip -q -r mobwrite mobwrite
 mv mobwrite.zip mobwrite_appengine.zip
 rm -r mobwrite/
