@@ -186,6 +186,8 @@
         var node = testObj.childNodes[partIndex];
         if (node.nodeName == '#text' || node.nodeName == '#comment') {
           // Skip.  Text will just be whitespace.
+        } else if (node.nodeName == 'DESCRIPTION') {
+          // Skip test descriptions
         } else if (node.nodeName == 'QUESTION') {
           // Extract the next question.
           lastQuestion = getTextFromChild(testObj, partIndex);

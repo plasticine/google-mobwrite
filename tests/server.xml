@@ -1,4 +1,11 @@
 <XML>
+  <DESCRIPTION>
+    Test cases for communicating with a mobwrite server.
+    For a description of the protocol, see:
+      http://code.google.com/p/google-mobwrite/wiki/Protocol
+    [RANDOM] is replaced with a string of random digits. The test harness
+    chooses a new random string each time it runs a test case.
+  </DESCRIPTION>
 
   <TEST NAME="Empty">
     <QUESTION>
@@ -7,7 +14,11 @@
     </ANSWER>
   </TEST>
 
-  <TEST NAME="Null">
+  <TEST NAME="Ignore bad commands">
+    <DESCRIPTION>
+    The server replies to bad commands with an empty string.
+    ('x' is not a defined command in the protocol.)
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
@@ -20,6 +31,11 @@ UNKNOWN COMMAND
   </TEST>
 
   <TEST NAME="Good raw text">
+    <DESCRIPTION>
+    The client sends its file to the server with the 'r' command.
+    The same file is already on the server,
+    so it replies that there are no diffs.
+    </DESCRIPTION>
     <QUESTION>
 U:user[RANDOM]
 f:0:unittest[RANDOM]
@@ -47,6 +63,10 @@ d:0:=11
   </TEST>
 
   <TEST NAME="Bad raw text">
+    <DESCRIPTION>
+    The client sends its file to the server with the 'r' command.
+    The server has a different file, so it replies with diffs.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]
 F:0:unittest[RANDOM]
@@ -72,7 +92,11 @@ d:0:-1	+Hello world
   </TEST>
 
   <TEST NAME="Raw text on a null file">
-    <!-- An null file will accept whatever is assumed. -->
+    <DESCRIPTION>
+    The client sends its file to the server with the 'r' command.
+    The server has nothing, so it creates its file with the same text,
+    and replies that there are no diffs.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
@@ -87,6 +111,11 @@ d:0:=11
   </TEST>
 
   <TEST NAME="Good delta on null file">
+    <DESCRIPTION>
+    The client sends a diff with the 'd' command.
+    The server has nothing, so it applies the diff to an empty file,
+    and replies that there are no diffs.
+    </DESCRIPTION>
     <QUESTION>
 U:user[RANDOM]
 F:0:unittest[RANDOM]
@@ -102,6 +131,12 @@ d:0:=11
   </TEST>
 
   <TEST NAME="Bad delta on null file">
+    <DESCRIPTION>
+    The client sends a diff with the 'd' command.
+    The server has nothing, so it creates the file,
+    but diff cannot be applied to an empty file, so it's ignored.
+    The server tells the client that the file is empty.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
@@ -116,6 +151,11 @@ r:0:
   </TEST>
 
   <TEST NAME="Good delta">
+    <DESCRIPTION>
+    The client sends a file and a diff to apply.
+    The server creates the file, applies the diff,
+    and replies that there are no diffs.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]
 F:0:unittest[RANDOM]
@@ -131,6 +171,12 @@ d:0:=13
   </TEST>
 
   <TEST NAME="Bad delta">
+    <DESCRIPTION>
+    The client sends a file and a bad diff to apply.
+    The server creates the file, ignores the diff,
+    and tells the client to replace its file
+    with the text before the diff.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
@@ -146,6 +192,15 @@ R:0:Hello world
   </TEST>
 
   <TEST NAME="Delta nullified file">
+    <DESCRIPTION>
+    Clients A and B and the server have the same file.
+    Client A tells the server to nullify the file.
+    Client C asks the server for updates.
+    The server doesn't have anything for C,
+    so it returns an empty file.
+    Client B asks the server for updates.
+    The server replies that B has the latest file.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]a
 f:0:unittest[RANDOM]
@@ -204,6 +259,9 @@ d:1:=11
   </TEST>
 
   <TEST NAME="Force Delta nullified file">
+    <DESCRIPTION>
+    Same as the previous test, but using 'D' (force delta) instead of 'd'.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]a
 f:0:unittest[RANDOM]
@@ -262,6 +320,11 @@ d:1:=11
   </TEST>
 
   <TEST NAME="Raw text with all normal chars">
+    <DESCRIPTION>
+    Client sends a file containing punctuation, and a bad delta.
+    Server ignores the delta and sends the whole file back.
+    (The bad delta is to get the server to send the file.)
+    </DESCRIPTION>
     <!-- Note, '&amp;' is encoded here for the XML. -->
     <QUESTION>
 u:user[RANDOM]
@@ -278,6 +341,12 @@ R:0:A-Z a-z 0-9 - _ . ! ~ * ' ( ) ; / ? : @ &amp; = + $ , #
   </TEST>
 
   <TEST NAME="Delta with all normal chars">
+    <DESCRIPTION>
+    Client sends an empty file and a delta containing punctuation.
+    Then asks the server to send the diffs based on a file containing just 'x'.
+    (This is to get the server to send a delta containing punctuation.)
+    The server sends a delta restoring the file.
+    </DESCRIPTION>
     <!-- Note, '&amp;' is encoded here for the XML. -->
     <QUESTION>
 u:user[RANDOM]
@@ -295,6 +364,11 @@ d:0:-1	+A-Z a-z 0-9 - _ . ! ~ * ' ( ) ; / ? : @ &amp; = + $ , #
   </TEST>
 
   <TEST NAME="Raw text with special chars">
+    <DESCRIPTION>
+    Verifies that the null, percent, and newline characters
+    can be sent and received as part of a file,
+    escaped as 2-digit hexadecimal numbers, preceded by percent.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
@@ -310,6 +384,10 @@ R:0:a%00b%25c%0Ad
   </TEST>
 
   <TEST NAME="Delta with special chars">
+    <DESCRIPTION>
+    Verifies that the null, percent, and newline characters
+    can be sent and received as part of a diff.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
@@ -326,6 +404,11 @@ d:0:-1	+a%00b%25c%0Ad
   </TEST>
 
   <TEST NAME="Raw text with Unicode">
+    <DESCRIPTION>
+    Verifies that the Unicode character 3046 (HIRAGANA LETTER U)
+    can be transmitted in a file in both directions
+    by converting to UTF 8 and sending the hexadecimal escaped form of each byte.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
@@ -341,6 +424,11 @@ R:0:a%E3%81%86b
   </TEST>
 
   <TEST NAME="Delta with Unicode">
+    <DESCRIPTION>
+    Verifies that the Unicode character 3046 (HIRAGANA LETTER U)
+    can be transmitted in a delta in both directions
+    by converting to UTF 8 and sending the hexadecimal escaped form of each byte.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
@@ -357,6 +445,10 @@ d:0:-1	+a%E3%81%86b
   </TEST>
 
   <TEST NAME="Raw text with malformed linefeed">
+    <DESCRIPTION>
+    The client sends a text to the server with a return character.
+    The server tells the client to use a linefeed instead.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
@@ -371,6 +463,11 @@ D:0:=1	-1	+%0A	=1
   </TEST>
 
   <TEST NAME="Delta with malformed linefeed">
+    <DESCRIPTION>
+    The client sends a diff adding a DOS-style line ending to the file.
+    The server tells the client to delete the return character,
+    turning it into a Unix line ending.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
@@ -386,6 +483,12 @@ d:0:=1	-1	=2
   </TEST>
 
   <TEST NAME="Simple collaboration">
+    <DESCRIPTION>
+    Clients A and B have 'Hello world'.
+    Client B changes 'Hello' to 'Goodbye'.
+    Client A polls for changes.
+    The server tells A to change 'Hello' to 'Goodbye'.
+    </DESCRIPTION>
     <QUESTION>
 F:0:unittest[RANDOM]
 U:user[RANDOM]a
