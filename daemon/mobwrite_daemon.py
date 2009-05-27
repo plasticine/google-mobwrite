@@ -312,52 +312,42 @@ class BufferObj:
   # .data - The contents of the buffer.
   # .lock - Access control for writing to the text on this object.
 
-  def __init__(self, name):
+  def __init__(self, name, size):
     # Setup this object
     self.name = name
     self.lasttime = datetime.datetime.now()
-    self.data = None
     self.lock = thread.allocate_lock()
 
-    # lock_views must be acquired by the caller to prevent simultaneous
-    # creations of the same view.
-    assert lock_buffers.locked(), "Can't create BufferObj unless locked."
-    global buffers
-    buffers[name] = self
-
-  def init(self, size):
     # Initialize the buffer with a set number of slots.
     # Null characters form dividers between each slot.
     array = []
     for x in xrange(size - 1):
       array.append("\0")
     self.data = "".join(array)
-    mobwrite_core.LOG.debug("Buffer initialized to %d slots: %s" % (size, self.name))
+
+    # lock_views must be acquired by the caller to prevent simultaneous
+    # creations of the same view.
+    assert lock_buffers.locked(), "Can't create BufferObj unless locked."
+    global buffers
+    buffers[name] = self
+    mobwrite_core.LOG.debug("Buffer initialized to %d slots: %s" % (size, name))
 
   def set(self, n, text):
     # Set the nth slot of this buffer with text.
-    if self.data == None:
-      mobwrite_core.LOG.warning("Unable to insert into undefined buffer")
-      return
+    assert self.lock.locked(), "Can't edit BufferObj unless locked."
     # n is 1-based.
     n -= 1
     array = self.data.split("\0")
-    if n >= 0 and n < len(array):
-      array[n] = text
-      self.data = "\0".join(array)
-      mobwrite_core.LOG.debug("Inserted into slot %d of a %d slot buffer: %s" %
-                    (n + 1, len(array), self.name))
-    else:
-      mobwrite_core.LOG.warning("Unable to insert \"%s\" into slot %d of a %d slot buffer: %s" %
-                      (text, n + 1, len(array), self.name))
+    assert 0 <= n < len(array), "Invalid buffer insertion"
+    array[n] = text
+    self.data = "\0".join(array)
+    mobwrite_core.LOG.debug("Inserted into slot %d of a %d slot buffer: %s" %
+        (n + 1, len(array), self.name))
 
-  def completeText(self):
+  def get(self):
     # Fetch the completed text from the buffer.
-    if self.data == None:
-      return None
     if ("\0" + self.data + "\0").find("\0\0") == -1:
       text = self.data.replace("\0", "")
-      text = urllib.unquote(text)
       # Delete this buffer.
       self.lasttime = datetime.datetime.min
       self.cleanup()
@@ -376,23 +366,50 @@ class BufferObj:
       del buffers[self.name]
     lock_buffers.release()
 
+def feedBuffer(name, size, index, datum):
+  """Add one block of text to the buffer and return the whole text if the
+    buffer is complete.
 
-def fetch_bufferobj(name, size):
-  # Retrieve the named buffer object.  Create it if it doesn't exist.
-  name += "_%d" % size
-  # Don't let two simultaneous creations happen, or a deletion during a
-  # retrieval.
-  lock_buffers.acquire()
-  if buffers.has_key(name):
-    bufferobj = buffers[name]
-    bufferobj.lasttime = datetime.datetime.now()
-    mobwrite_core.LOG.debug("Found buffer: '%s'" % name)
+  Args:
+    name: Unique name of buffer object.
+    size: Total number of slots in the buffer.
+    index: Which slot to insert this text (note that index is 1-based)
+    datum: The text to insert.
+
+  Returns:
+    String with all the text blocks merged in the correct order.  Or if the
+    buffer is not yet complete returns the empty string.
+  """
+  # Note that 'index' is 1-based.
+  if not 0 < index <= size:
+    mobwrite_core.LOG.error("Invalid buffer: '%s %d %d'" % (name, size, index))
+    text = ""
+  elif size == 1 and index == 1:
+    # A buffer with one slot?  Pointless.
+    text = datum
+    mobwrite_core.LOG.debug("Buffer with only one slot: '%s'" % name)
   else:
-    bufferobj = BufferObj(name)
-    bufferobj.init(size)
-    mobwrite_core.LOG.debug("Creating buffer: '%s'" % name)
-  lock_buffers.release()
-  return bufferobj
+    # Retrieve the named buffer object.  Create it if it doesn't exist.
+    name += "_%d" % size
+    # Don't let two simultaneous creations happen, or a deletion during a
+    # retrieval.
+    lock_buffers.acquire()
+    if buffers.has_key(name):
+      bufferobj = buffers[name]
+      bufferobj.lasttime = datetime.datetime.now()
+      mobwrite_core.LOG.debug("Found buffer: '%s'" % name)
+    else:
+      bufferobj = BufferObj(name, size)
+      mobwrite_core.LOG.debug("Creating buffer: '%s'" % name)
+    bufferobj.lock.acquire()
+    lock_buffers.release()
+    bufferobj.set(index, datum)
+    # Check if Buffer is complete.
+    text = bufferobj.get()
+    bufferobj.lock.release()
+    if text == None:
+      text = ""
+  return urllib.unquote(text)
 
 
 def cleanup_thread():
@@ -515,17 +532,13 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
         except ValueError:
           mobwrite_core.LOG.warning("Invalid buffer format: %s" % value)
           continue
-        # Retrieve or make a buffer.
-        bufferobj = fetch_bufferobj(name, size)
         # Store this buffer fragment.
-        bufferobj.set(index, text)
+        text = feedBuffer(name, size, index, text)
         # Check to see if the buffer is complete.  If so, execute it.
-        text = bufferobj.completeText()
         if text:
-          mobwrite_core.LOG.info("Executing buffer: %s" % bufferobj.name)
+          mobwrite_core.LOG.info("Executing buffer: %s_%d" % (name, size))
           # Duplicate last character.  Should be a line break.
           output.append(self.parseRequest(text + text[-1]))
-          bufferobj.init(0)
 
       elif name == "u" or name == "U":
         # Remember the username.

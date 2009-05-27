@@ -154,38 +154,51 @@ class BufferObj(db.Model):
   lasttime = db.DateTimeProperty(auto_now=True)
 
 
-def setToBuffer(name, size, index, datum):
+def feedBuffer(name, size, index, datum):
+  """Add one block of text to the buffer and return the whole text if the
+    buffer is complete.
+
+  Args:
+    name: Unique name of buffer object.
+    size: Total number of slots in the buffer.
+    index: Which slot to insert this text (note that index is 1-based)
+    datum: The text to insert.
+
+  Returns:
+    String with all the text blocks merged in the correct order.  Or if the
+    buffer is not yet complete returns the empty string.
+  """
   # Not thread safe -- must be wrapped in a transaction.
-  # Note that 'index' is 1-based.
-  # DataStore doesn't like names starting with numbers.
-  name = "_%s_%d" % (name, size)
-  key = db.Key.from_path(BufferObj.kind(), name)
-  bufferobj = db.get(key)
-  # Should be zero or one result.
-  if bufferobj == None:
-    data = []
-    for x in xrange(size):
-      data.append("")
-    data[index - 1] = datum
-    bufferobj = BufferObj(key_name=name, data=data)
-    mobwrite_core.LOG.debug("Created new BufferObj: '%s' (%d)" % (name, index))
+  if not 0 < index <= size:
+    mobwrite_core.LOG.error("Invalid buffer: '%s %d %d'" % (name, size, index))
+    text = ""
+  elif size == 1 and index == 1:
+    # A buffer with one slot?  Pointless.
+    text = datum
+    mobwrite_core.LOG.debug("Buffer with only one slot: '%s'" % name)
   else:
-    bufferobj.data[index - 1] = datum
-    mobwrite_core.LOG.debug("Reloaded existing BufferObj: '%s' (%d)" % (name, index))
-  bufferobj.put()
-
-
-def getFromBuffer(name, size):
-  # DataStore doesn't like names starting with numbers.
-  name = "_%s_%d" % (name, size)
-  key = db.Key.from_path(BufferObj.kind(), name)
-  bufferobj = db.get(key)
-  # Should be zero or one result.
-  if bufferobj == None or "" in bufferobj.data:
-    return None
-  # Strings are stored, but the DB returns it as Unicode.
-  text = str("".join(bufferobj.data))
-  bufferobj.delete()
+    # DataStore doesn't like names starting with numbers.
+    name = "_%s_%d" % (name, size)
+    key = db.Key.from_path(BufferObj.kind(), name)
+    bufferobj = db.get(key)
+    # Should be zero or one result.
+    if bufferobj == None:
+      data = []
+      for x in xrange(size):
+        data.append("")
+      data[index - 1] = datum
+      bufferobj = BufferObj(key_name=name, data=data)
+      mobwrite_core.LOG.debug("Created new BufferObj: '%s' (%d)" % (name, index))
+    else:
+      bufferobj.data[index - 1] = datum
+      mobwrite_core.LOG.debug("Reloaded existing BufferObj: '%s' (%d)" % (name, index))
+    # Check if Buffer is complete.
+    if "" in bufferobj.data:
+      bufferobj.put()
+      return None
+    # Strings are stored, but the DB returns it as Unicode.
+    text = str("".join(bufferobj.data))
+    bufferobj.delete()
   return urllib.unquote(text)
 
 
@@ -274,9 +287,8 @@ def parseRequest(data):
         mobwrite_core.LOG.warning("Invalid buffer format: %s" % value)
         continue
       # Store this buffer fragment.
-      db.run_in_transaction(setToBuffer, name, size, index, text)
+      text = db.run_in_transaction(feedBuffer, name, size, index, text)
       # Check to see if the buffer is complete.  If so, execute it.
-      text = getFromBuffer(name, size)
       if text:
         mobwrite_core.LOG.info("Executing buffer: %s_%d" % (name, size))
         # Duplicate last character.  Should be a line break.
