@@ -706,7 +706,7 @@ D:0:=11
     Send two parts of a three-part buffer (2, 3) and verify no ouput.
     </DESCRIPTION>
     <QUESTION>
-b:testbuffer2 3 2 f%3A0%3A0unittest[RANDOM]%0A
+b:testbuffer2 3 2 f%3A0%3Aunittest[RANDOM]%0A
 b:testbuffer2 3 3 R%3A0%3AHello world%0A
 
     </QUESTION>
@@ -740,14 +740,14 @@ D:0:=11
     Only the latter should return an answer.
     </DESCRIPTION>
     <QUESTION>
-b:testbuffer4 0 0 u%3Auser[RANDOM]%0Af%3A0%3A0unittest[RANDOM]a%0AR%3A0%3AHello world%0A
-b:testbuffer4 0 1 u%3Auser[RANDOM]%0Af%3A0%3A0unittest[RANDOM]b%0AR%3A0%3AHello world%0A
-b:testbuffer5 1 2 u%3Auser[RANDOM]%0Af%3A0%3A0unittest[RANDOM]c%0AR%3A0%3AHello world%0A
-b:testbuffer6 1 1 u%3Auser[RANDOM]%0Af%3A0%3A0unittest[RANDOM]d%0AR%3A0%3AHello world%0A
+b:testbuffer4 0 0 u%3Auser[RANDOM]%0Af%3A0%3Aunittest[RANDOM]a%0AR%3A0%3AHello world%0A
+b:testbuffer5 0 1 u%3Auser[RANDOM]%0Af%3A0%3Aunittest[RANDOM]b%0AR%3A0%3AHello world%0A
+b:testbuffer6 1 2 u%3Auser[RANDOM]%0Af%3A0%3Aunittest[RANDOM]c%0AR%3A0%3AHello world%0A
+b:testbuffer7 1 1 u%3Auser[RANDOM]%0Af%3A0%3Aunittest[RANDOM]d%0AR%3A0%3AHello world%0A
 
     </QUESTION>
     <ANSWER>
-F:0:0unittest[RANDOM]d
+F:0:unittest[RANDOM]d
 D:0:=11
 
     </ANSWER>

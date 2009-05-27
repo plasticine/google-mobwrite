@@ -59,6 +59,14 @@ class TextObj(mobwrite_core.TextObj, db.Model):
 
   def setText(self, newtext):
     mobwrite_core.TextObj.setText(self, newtext)
+
+    if (not self.changed and
+        self.lasttime + mobwrite_core.TIMEOUT_TEXT <
+        datetime.datetime.now() + mobwrite_core.TIMEOUT_VIEW):
+      # Text object will expire before its view.  Bump the database.
+      self.changed = True
+      mobwrite_core.LOG.info("Keep-alive save for TextObj: '%s'" % self.key().name())
+
     if self.changed:
       self.put()
       if newtext == None:
@@ -125,9 +133,6 @@ class ViewObj(mobwrite_core.ViewObj, db.Model):
   def nullify(self):
     mobwrite_core.LOG.debug("Nullified ViewObj: '%s'" % self.key().name())
     self.delete()
-
-  def fetchTextObj(self):
-    return self.textobj
 
 def fetchUserViews(username):
   query = db.GqlQuery("SELECT * FROM ViewObj WHERE username = :1", username)
@@ -379,7 +384,7 @@ def doActions(actions, echo_username):
       mobwrite_core.LOG.debug("Nullifying: '%s@%s'" %
           (viewobj.username, viewobj.filename))
       # Textobj transaction not needed; just a set.
-      textobj = viewobj.fetchTextObj()
+      textobj = viewobj.textobj
       textobj.setText(None)
       viewobj.nullify();
       viewobj = None
@@ -420,7 +425,7 @@ def doActions(actions, echo_username):
       viewobj.edit_stack = ""
       # Textobj transaction not needed; in a collision here data-loss is
       # inevitable anyway.
-      textobj = viewobj.fetchTextObj()
+      textobj = viewobj.textobj
       if action["force"] or textobj.text == None:
         # Clobber the server's text.
         if textobj.text != data:
@@ -457,40 +462,9 @@ def doActions(actions, echo_username):
               (len(viewobj.shadow), viewobj.username, viewobj.filename))
         viewobj.shadow_client_version += 1
         if diffs != None:
-          # Expand the fragile diffs into a full set of patches.
-          patches = mobwrite_core.DMP.patch_make(viewobj.shadow, diffs)
-          # First, update the client's shadow.
-          viewobj.shadow = mobwrite_core.DMP.diff_text2(diffs)
-          viewobj.backup_shadow = viewobj.shadow
-          viewobj.backup_shadow_server_version = viewobj.shadow_server_version
-          # Second, deal with the server's text.
-          textobj = viewobj.fetchTextObj()
-          if textobj.text == None:
-            # A view is sending a valid delta on a file we've never heard of.
-            textobj.setText(viewobj.shadow)
-            action["force"] = False
-          if action["force"]:
-            # Clobber the server's text if a change was received.
-            if len(diffs) > 1 or diffs[0][0] != mobwrite_core.DMP.DIFF_EQUAL:
-              mastertext = viewobj.shadow
-              mobwrite_core.LOG.debug("Overwrote content: '%s@%s'" %
-                  (viewobj.username, viewobj.filename))
-            else:
-              mastertext = textobj.text
-          else:
-            (mastertext, results) = mobwrite_core.DMP.patch_apply(patches, textobj.text)
-            mobwrite_core.LOG.debug("Patched (%s): '%s@%s'" %
-                (",".join(["%s" % (x) for x in results]),
-                 viewobj.username, viewobj.filename))
-          if textobj.text != mastertext:
-            textobj.setText(mastertext)
-
-          if (textobj.lasttime + mobwrite_core.TIMEOUT_TEXT <
-              viewobj.lasttime + mobwrite_core.TIMEOUT_VIEW):
-            # Text object will expire before this view.  Bump the database.
-            textobj.put()
-            mobwrite_core.LOG.info("Keep-alive save for TextObj: '%s'" %
-                         textobj.key().name())
+          # Textobj transaction required for read/patch/write cycle.
+          db.run_in_transaction(mobwrite_core.applyPatches, viewobj, diffs,
+              action)
 
     # Generate output if this is the last action or the username/filename
     # will change in the next iteration.
@@ -522,7 +496,7 @@ def generateDiffs(viewobj, last_username, last_filename,
     output.append("F:%d:%s\n" % (viewobj.shadow_client_version, viewobj.filename))
 
   # Textobj transaction not needed; just a get, stale info is ok.
-  textobj = viewobj.fetchTextObj()
+  textobj = viewobj.textobj
   mastertext = textobj.text
 
   stack = stringToStack(viewobj.edit_stack)

@@ -77,6 +77,7 @@ class TextObj:
       self.text = newtext
       self.changed = True
 
+
 class ViewObj:
   # An object which contains one user's view of one text.
 
@@ -99,3 +100,43 @@ class ViewObj:
     self.backup_shadow_server_version = kwargs.get("backup_shadow_server_version", 0)
     self.shadow = kwargs.get("shadow", u"")
     self.backup_shadow = kwargs.get("backup_shadow", u"")
+
+
+def applyPatches(viewobj, diffs, action):
+  """Apply a set of patches onto the view and text objects.  This function must
+    be enclosed in a lock or transaction since the text object is shared.
+
+  Args:
+    textobj: The shared server text to be updated.
+    viewobj: The user's view to be updated.
+    diffs: List of diffs to apply to both the view and the server.
+    action: Parameters for how forcefully to make the patch; may be modified.
+  """
+  # Expand the fragile diffs into a full set of patches.
+  patches = DMP.patch_make(viewobj.shadow, diffs)
+
+  # First, update the client's shadow.
+  viewobj.shadow = DMP.diff_text2(diffs)
+  viewobj.backup_shadow = viewobj.shadow
+  viewobj.backup_shadow_server_version = viewobj.shadow_server_version
+
+  # Second, deal with the server's text.
+  textobj = viewobj.textobj
+  if textobj.text == None:
+    # A view is sending a valid delta on a file we've never heard of.
+    textobj.setText(viewobj.shadow)
+    action["force"] = False
+  if action["force"]:
+    # Clobber the server's text if a change was received.
+    if patches:
+      mastertext = viewobj.shadow
+      LOG.debug("Overwrote content: '%s@%s'" %
+          (viewobj.username, viewobj.filename))
+    else:
+      mastertext = textobj.text
+  else:
+    (mastertext, results) = DMP.patch_apply(patches, textobj.text)
+    LOG.debug("Patched (%s): '%s@%s'" %
+        (",".join(["%s" % (x) for x in results]),
+         viewobj.username, viewobj.filename))
+  textobj.setText(mastertext)

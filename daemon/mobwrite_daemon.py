@@ -475,7 +475,6 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
         self.wfile.write(self.parseRequest("".join(data)))
         break
 
-
     # Goodbye
     mobwrite_core.LOG.debug("Disconnecting.")
 
@@ -692,33 +691,10 @@ class EchoRequestHandler(SocketServer.StreamRequestHandler):
                 (len(viewobj.shadow), viewobj.username, viewobj.filename))
           viewobj.shadow_client_version += 1
           if diffs != None:
-            # Expand the fragile diffs into a full set of patches.
-            patches = mobwrite_core.DMP.patch_make(viewobj.shadow, diffs)
-            # First, update the client's shadow.
-            viewobj.shadow = mobwrite_core.DMP.diff_text2(diffs)
-            viewobj.backup_shadow = viewobj.shadow
-            viewobj.backup_shadow_server_version = viewobj.shadow_server_version
-            # Second, deal with the server's text.
+            # Textobj lock required for read/patch/write cycle.
+            textobj = viewobj.textobj
             textobj.lock.acquire()
-            if textobj.text == None:
-              # A view is sending a valid delta on a file we've never heard of.
-              textobj.setText(viewobj.shadow)
-              action["force"] = False
-            if action["force"]:
-              # Clobber the server's text if a change was received.
-              if len(diffs) > 1 or diffs[0][0] != mobwrite_core.DMP.DIFF_EQUAL:
-                mastertext = viewobj.shadow
-                mobwrite_core.LOG.debug("Overwrote content: '%s@%s'" %
-                    (viewobj.username, viewobj.filename))
-              else:
-                mastertext = textobj.text
-            else:
-              (mastertext, results) = mobwrite_core.DMP.patch_apply(patches, textobj.text)
-              mobwrite_core.LOG.debug("Patched (%s): '%s@%s'" %
-                  (",".join(["%s" % (x) for x in results]),
-                   viewobj.username, viewobj.filename))
-            if textobj.text != mastertext:
-              textobj.setText(mastertext)
+            mobwrite_core.applyPatches(viewobj, diffs, action)
             textobj.lock.release()
 
       # Generate output if this is the last action or the username/filename
