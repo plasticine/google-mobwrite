@@ -102,41 +102,149 @@ class ViewObj:
     self.backup_shadow = kwargs.get("backup_shadow", u"")
 
 
-def applyPatches(viewobj, diffs, action):
-  """Apply a set of patches onto the view and text objects.  This function must
-    be enclosed in a lock or transaction since the text object is shared.
+class MobWrite:
 
-  Args:
-    textobj: The shared server text to be updated.
-    viewobj: The user's view to be updated.
-    diffs: List of diffs to apply to both the view and the server.
-    action: Parameters for how forcefully to make the patch; may be modified.
-  """
-  # Expand the fragile diffs into a full set of patches.
-  patches = DMP.patch_make(viewobj.shadow, diffs)
+  def parseRequest(self, data):
+    # Passing a Unicode string is an easy way to cause numerous subtle bugs.
+    if type(data) != str:
+      LOG.critical("parseRequest data type is %s" % type(data))
+      return ""
+    if not (data.endswith("\n\n") or data.endswith("\r\r") or
+            data.endswith("\n\r\n\r") or data.endswith("\r\n\r\n")):
+      # There must be a linefeed followed by a blank line.
+      # Truncated data.  Abort.
+      LOG.warning("Truncated data: '%s'" % data)
+      return ""
 
-  # First, update the client's shadow.
-  viewobj.shadow = DMP.diff_text2(diffs)
-  viewobj.backup_shadow = viewobj.shadow
-  viewobj.backup_shadow_server_version = viewobj.shadow_server_version
+    # Parse the lines
+    actions = []
+    username = None
+    filename = None
+    server_version = None
+    echo_username = False
+    for line in data.splitlines():
+      if not line:
+        # Terminate on blank line.
+        break
+      if line.find(":") != 1:
+        # Invalid line.
+        continue
+      (name, value) = (line[:1], line[2:])
 
-  # Second, deal with the server's text.
-  textobj = viewobj.textobj
-  if textobj.text == None:
-    # A view is sending a valid delta on a file we've never heard of.
-    textobj.setText(viewobj.shadow)
-    action["force"] = False
-  if action["force"]:
-    # Clobber the server's text if a change was received.
-    if patches:
-      mastertext = viewobj.shadow
-      LOG.debug("Overwrote content: '%s@%s'" %
-          (viewobj.username, viewobj.filename))
+      # Parse out a version number for file, delta or raw.
+      version = None
+      if ("FfDdRr".find(name) != -1):
+        div = value.find(":")
+        if div > 0:
+          try:
+            version = int(value[:div])
+          except ValueError:
+            LOG.warning("Invalid version number: %s" % line)
+            continue
+          value = value[div + 1:]
+        else:
+          LOG.warning("Missing version number: %s" % line)
+          continue
+
+      if name == "b" or name == "B":
+        # Decode and store this entry into a buffer.
+        try:
+          (name, size, index, text) = value.split(" ", 3)
+          size = int(size)
+          index = int(index)
+        except ValueError:
+          LOG.warning("Invalid buffer format: %s" % value)
+          continue
+        # Store this buffer fragment.
+        text = self.feedBuffer(name, size, index, text)
+        # Check to see if the buffer is complete.  If so, execute it.
+        if text:
+          LOG.info("Executing buffer: %s_%d" % (name, size))
+          # Duplicate last character.  Should be a line break.
+          # Note that buffers are not intended to be mixed with other commands.
+          return self.parseRequest(text + text[-1])
+
+      elif name == "u" or name == "U":
+        # Remember the username.
+        username = value
+        if name == "U":
+          # Client requests explicit usernames in response.
+          echo_username = True
+
+      elif name == "f" or name == "F":
+        # Remember the filename and version.
+        filename = value
+        server_version = version
+
+      elif name == "n" or name == "N":
+        # Nullify this file.
+        filename = value
+        if username and filename:
+          action = {}
+          action["username"] = username
+          action["filename"] = filename
+          action["mode"] = "null"
+          actions.append(action)
+
+      else:
+        # A delta or raw action.
+        action = {}
+        if name == "d" or name == "D":
+          action["mode"] = "delta"
+        elif name == "r" or name == "R":
+          action["mode"] = "raw"
+        else:
+          action["mode"] = None
+        if name.isupper():
+          action["force"] = True
+        else:
+          action["force"] = False
+        action["server_version"] = server_version
+        action["client_version"] = version
+        action["data"] = value
+        if username and filename and action["mode"]:
+          action["username"] = username
+          action["filename"] = filename
+          actions.append(action)
+
+    return (actions, echo_username)
+
+
+  def applyPatches(self, viewobj, diffs, action):
+    """Apply a set of patches onto the view and text objects.  This function must
+      be enclosed in a lock or transaction since the text object is shared.
+
+    Args:
+      textobj: The shared server text to be updated.
+      viewobj: The user's view to be updated.
+      diffs: List of diffs to apply to both the view and the server.
+      action: Parameters for how forcefully to make the patch; may be modified.
+    """
+    # Expand the fragile diffs into a full set of patches.
+    patches = DMP.patch_make(viewobj.shadow, diffs)
+
+    # First, update the client's shadow.
+    viewobj.shadow = DMP.diff_text2(diffs)
+    viewobj.backup_shadow = viewobj.shadow
+    viewobj.backup_shadow_server_version = viewobj.shadow_server_version
+
+    # Second, deal with the server's text.
+    textobj = viewobj.textobj
+    if textobj.text == None:
+      # A view is sending a valid delta on a file we've never heard of.
+      textobj.setText(viewobj.shadow)
+      action["force"] = False
+    if action["force"]:
+      # Clobber the server's text if a change was received.
+      if patches:
+        mastertext = viewobj.shadow
+        LOG.debug("Overwrote content: '%s@%s'" %
+            (viewobj.username, viewobj.filename))
+      else:
+        mastertext = textobj.text
     else:
-      mastertext = textobj.text
-  else:
-    (mastertext, results) = DMP.patch_apply(patches, textobj.text)
-    LOG.debug("Patched (%s): '%s@%s'" %
-        (",".join(["%s" % (x) for x in results]),
-         viewobj.username, viewobj.filename))
-  textobj.setText(mastertext)
+      (mastertext, results) = DMP.patch_apply(patches, textobj.text)
+      LOG.debug("Patched (%s): '%s@%s'" %
+          (",".join(["%s" % (x) for x in results]),
+           viewobj.username, viewobj.filename))
+    textobj.setText(mastertext)
