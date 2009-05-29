@@ -243,10 +243,10 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
       mobwrite_core.LOG.warning("Database only partially cleaned")
 
   def handleRequest(self, text):
-    (actions, echo_username) = self.parseRequest(text)
-    return self.doActions(actions, echo_username)
+    actions = self.parseRequest(text)
+    return self.doActions(actions)
 
-  def doActions(self, actions, echo_username):
+  def doActions(self, actions):
     output = []
     last_username = None
     last_filename = None
@@ -372,7 +372,7 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
           actions[action_index + 1]["filename"] != viewobj.filename):
         output.append(self.generateDiffs(viewobj,
                                     last_username, last_filename,
-                                    echo_username, action["force"],
+                                    action["echo_username"], action["force"],
                                     delta_ok))
         last_username = viewobj.username
         last_filename = viewobj.filename

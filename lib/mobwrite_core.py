@@ -105,16 +105,34 @@ class ViewObj:
 class MobWrite:
 
   def parseRequest(self, data):
+    """Parse the raw MobWrite commands into a list of specific actions.
+    See: http://code.google.com/p/google-mobwrite/wiki/Protocol
+
+    Args:
+      data: A multi-line string of MobWrite commands.
+
+    Returns:
+      A list of actions, each action is a dictionary.  Typical action:
+      {"username":"fred",
+       "filename":"report",
+       "mode":"delta",
+       "data":"=10+Hello-7=2",
+       "force":False,
+       "server_version":3,
+       "client_version":3,
+       "echo_username":False
+      }
+    """
     # Passing a Unicode string is an easy way to cause numerous subtle bugs.
     if type(data) != str:
       LOG.critical("parseRequest data type is %s" % type(data))
-      return ""
+      return []
     if not (data.endswith("\n\n") or data.endswith("\r\r") or
             data.endswith("\n\r\n\r") or data.endswith("\r\n\r\n")):
       # There must be a linefeed followed by a blank line.
       # Truncated data.  Abort.
       LOG.warning("Truncated data: '%s'" % data)
-      return ""
+      return []
 
     # Parse the lines
     actions = []
@@ -167,9 +185,8 @@ class MobWrite:
       elif name == "u" or name == "U":
         # Remember the username.
         username = value
-        if name == "U":
-          # Client requests explicit usernames in response.
-          echo_username = True
+        # Client may request explicit usernames in response.
+        echo_username = (name == "U")
 
       elif name == "f" or name == "F":
         # Remember the filename and version.
@@ -202,12 +219,13 @@ class MobWrite:
         action["server_version"] = server_version
         action["client_version"] = version
         action["data"] = value
+        action["echo_username"] = echo_username
         if username and filename and action["mode"]:
           action["username"] = username
           action["filename"] = filename
           actions.append(action)
 
-    return (actions, echo_username)
+    return actions
 
 
   def applyPatches(self, viewobj, diffs, action):
