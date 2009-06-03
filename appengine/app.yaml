@@ -5,8 +5,11 @@ api_version: 1
 
 handlers:
 - url: /static
+  secure: optional
   static_dir: static
 - url: /scripts/q.py
+  secure: optional
   script: mobwrite_appengine.py
 - url: /
+  secure: optional
   script: index_redirect.py

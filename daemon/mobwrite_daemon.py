@@ -126,10 +126,13 @@ class TextObj(mobwrite_core.TextObj):
       # Terminate in-memory copy.
       global texts
       lock_texts.acquire()
-      del texts[self.name]
+      try:
+        del texts[self.name]
+      except KeyError:
+        mobwrite_core.LOG.error("Text object not in text list: '%s'" % self.name)
       lock_texts.release()
     else:
-      if not self.changed:
+      if self.changed:
         self.save()
       self.lock.release()
 
@@ -267,7 +270,10 @@ class ViewObj(mobwrite_core.ViewObj):
     if self.lasttime < datetime.datetime.now() - mobwrite_core.TIMEOUT_VIEW:
       mobwrite_core.LOG.info("Idle out: '%s@%s'" % (self.username, self.filename))
       global views
-      del views[(self.username, self.filename)]
+      try:
+        del views[(self.username, self.filename)]
+      except KeyError:
+        mobwrite_core.LOG.error("View object not in view list: '%s %s'" % (self.username, self.filename))
       self.textobj.views -= 1
     lock_views.release()
 

@@ -131,8 +131,12 @@ class ViewObj(mobwrite_core.ViewObj, db.Model):
     db.Model.__init__(self, *args, **kwargs)
 
   def nullify(self):
-    mobwrite_core.LOG.debug("Nullified ViewObj: '%s'" % self.key().name())
-    self.delete()
+    try:
+      mobwrite_core.LOG.debug("Nullified ViewObj: '%s'" % self.key().name())
+      self.delete()
+    except db.NotSavedError:
+      # This ViewObj never made it to the database, nothing to delete.
+      pass
 
 def fetchUserViews(username):
   query = db.GqlQuery("SELECT * FROM ViewObj WHERE username = :1", username)
@@ -157,6 +161,7 @@ class BufferObj(db.Model):
 
   data = db.StringListProperty()
   lasttime = db.DateTimeProperty(auto_now=True)
+
 
 class AppEngineMobWrite(mobwrite_core.MobWrite):
 
@@ -286,6 +291,7 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
         textobj = viewobj.textobj
         textobj.setText(None)
         viewobj.nullify();
+        del user_views[filename]
         viewobj = None
         continue
 

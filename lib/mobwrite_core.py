@@ -252,17 +252,20 @@ class MobWrite:
       # A view is sending a valid delta on a file we've never heard of.
       textobj.setText(viewobj.shadow)
       action["force"] = False
-    if action["force"]:
-      # Clobber the server's text if a change was received.
-      if patches:
-        mastertext = viewobj.shadow
-        LOG.debug("Overwrote content: '%s@%s'" %
-            (viewobj.username, viewobj.filename))
-      else:
-        mastertext = textobj.text
+      LOG.debug("Set content: '%s@%s'" %
+          (viewobj.username, viewobj.filename))
     else:
-      (mastertext, results) = DMP.patch_apply(patches, textobj.text)
-      LOG.debug("Patched (%s): '%s@%s'" %
-          (",".join(["%s" % (x) for x in results]),
-           viewobj.username, viewobj.filename))
-    textobj.setText(mastertext)
+      if action["force"]:
+        # Clobber the server's text if a change was received.
+        if patches:
+          mastertext = viewobj.shadow
+          LOG.debug("Overwrote content: '%s@%s'" %
+              (viewobj.username, viewobj.filename))
+        else:
+          mastertext = textobj.text
+      else:
+        (mastertext, results) = DMP.patch_apply(patches, textobj.text)
+        LOG.debug("Patched (%s): '%s@%s'" %
+            (",".join(["%s" % (x) for x in results]),
+             viewobj.username, viewobj.filename))
+      textobj.setText(mastertext)

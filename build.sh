@@ -19,7 +19,7 @@ cp remote-demos/index.html remote-demos/editor.html remote-demos/form.html remot
 mkdir mobwrite/tests
 cp tests/index.html tests/client.html tests/q.html tests/server.html tests/server.xml mobwrite/tests/
 mkdir mobwrite/tools
-cp tools/download.py tools/upload.py tools/mobwritelib.py tools/sync.py tools/demo.cfg mobwrite/tools/
+cp tools/download.py tools/upload.py tools/loadtest.py tools/mobwritelib.py tools/sync.py tools/demo.cfg mobwrite/tools/
 zip -q -r mobwrite mobwrite
 mv mobwrite.zip mobwrite_daemon.zip
 rm -r mobwrite/
@@ -39,7 +39,7 @@ cp remote-demos/index.html remote-demos/editor.html remote-demos/form.html remot
 mkdir mobwrite/static/tests
 cp tests/index.html tests/client.html tests/q.html tests/server.html tests/server.xml mobwrite/static/tests/
 mkdir mobwrite/tools
-cp tools/download.py tools/upload.py tools/mobwritelib.py tools/sync.py tools/demo.cfg mobwrite/tools/
+cp tools/download.py tools/upload.py tools/loadtest.py tools/mobwritelib.py tools/sync.py tools/demo.cfg mobwrite/tools/
 zip -q -r mobwrite mobwrite
 mv mobwrite.zip mobwrite_appengine.zip
 rm -r mobwrite/

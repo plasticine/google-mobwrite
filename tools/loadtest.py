@@ -32,38 +32,14 @@ import sys
 import thread
 import time
 
-def singleRequest(url):
+def makeRequest(url):
   # Compute a user name.
-  if random.randint(1, 2) == 1:
-    # 50% chance of creating a unique user.
-    username = "loadtester_" + mobwritelib.uniqueId()
-  else:
-    # 50% chance of touching an existing user.
-    username = "loadtester_shared"
+  username = "loadtester_" + mobwritelib.uniqueId()
   commands = "U:%s\n" % username
-
-  # Compute a file name.
-  if random.randint(1, 2) == 1:
-    # 50% chance of creating a unique file.
-    filename = "loadtest_" + mobwritelib.uniqueId()
-  else:
-    # 50% chance of touching an existing file.
-    filename = "loadtest_shared"
-
-  mode = random.randint(1, 3)
-  if mode == 1:
-    # Nullify the file.
-    commands += "N:%s\n" % filename
-  else:
-    commands += "F:0:%s\n" % filename
-    if mode == 2:
-      # Force a raw dump.
-      commands += "R:0:Hello world\n"
-    elif mode == 3:
-      # Send a delta (maybe valid, maybe not)
-      commands += "d:0:+Goodbye world\n"
+  for x in xrange(20):
+    commands += singleFile()
   commands += "\n"
-  
+
   startTime = time.time()
   results = mobwritelib.send(url, commands)
   endTime = time.time()
@@ -72,9 +48,30 @@ def singleRequest(url):
   delta = endTime - startTime
   print "%f seconds" % delta
 
+def singleFile():
+  # Compute a file name.
+  filename = "loadtest_" + mobwritelib.uniqueId()
+
+  mode = random.randint(1, 3)
+  if mode == 1:
+    # Nullify the file.
+    commands = "N:%s\n" % filename
+  else:
+    commands = "F:0:%s\n" % filename
+    if mode == 2:
+      # Force a raw dump.
+      commands += "R:0:Hello world\n"
+    elif mode == 3:
+      # Send a delta.
+      commands += "d:0:+Goodbye world\n"
+  return commands
+
 def testLoop(url, hertz):
   while 1:
-    thread.start_new_thread(singleRequest, (url,))
+    try:
+      thread.start_new_thread(makeRequest, (url,))
+    except:
+      print "Unable to start thread."
     time.sleep(1.0 / hertz)
 
 if __name__ == "__main__":
