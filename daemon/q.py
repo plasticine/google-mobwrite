@@ -28,6 +28,8 @@ __author__ = "fraser@google.com (Neil Fraser)"
 
 import socket
 
+PORT = 3017
+
 def handler(req):
   if req == None:
     # CGI call
@@ -36,7 +38,8 @@ def handler(req):
   else:
     # mod_python call
     req.content_type = 'text/plain'
-    form = util.FieldStorage(req)
+    # Publisher mode provides req.form, regular mode does not.
+    form = getattr(req, "form", util.FieldStorage(req))
 
   outStr = '\n'
   if form.has_key('q'):
@@ -49,7 +52,7 @@ def handler(req):
   inStr = ''
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   try:
-    s.connect(("localhost", 3017))
+    s.connect(("localhost", PORT))
   except socket.error, msg:
     s = None
   if not s:
@@ -95,3 +98,4 @@ else:
   # mod_python call
   from mod_python import apache
   from mod_python import util
+

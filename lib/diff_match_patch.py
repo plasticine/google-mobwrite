@@ -1,4 +1,4 @@
-#!/usr/bin/python2.2
+#!/usr/bin/python
 
 """Diff Match and Patch
 
@@ -429,8 +429,8 @@ class diff_match_patch:
         else:
           x -= 1
           y -= 1
-          assert (text1[x] == text2[y],
-                  "No diagonal.  Can't happen. (diff_path1)")
+          assert text1[x] == text2[y], ("No diagonal.  " +
+              "Can't happen. (diff_path1)")
           if last_op == self.DIFF_EQUAL:
             path[0] = (self.DIFF_EQUAL, text1[x] + path[0][1])
           else:
@@ -474,8 +474,8 @@ class diff_match_patch:
         else:
           x -= 1
           y -= 1
-          assert (text1[-x - 1] == text2[-y - 1],
-                 "No diagonal.  Can't happen. (diff_path2)")
+          assert text1[-x - 1] == text2[-y - 1], ("No diagonal.  " +
+              "Can't happen. (diff_path2)")
           if last_op == self.DIFF_EQUAL:
             path[-1] = (self.DIFF_EQUAL, path[-1][1] + text1[-x - 1])
           else:
@@ -1038,6 +1038,32 @@ class diff_match_patch:
         text.append(data)
     return "".join(text)
 
+  def diff_levenshtein(self, diffs):
+    """Compute the Levenshtein distance; the number of inserted, deleted or
+    substituted characters.
+
+    Args:
+      diffs: Array of diff tuples.
+
+    Returns:
+      Number of changes.
+    """
+    levenshtein = 0
+    insertions = 0
+    deletions = 0
+    for (op, data) in diffs:
+      if op == self.DIFF_INSERT:
+        insertions += len(data)
+      elif op == self.DIFF_DELETE:
+        deletions += len(data)
+      elif op == self.DIFF_EQUAL:
+        # A deletion and an insertion is one substitution.
+        levenshtein += max(insertions, deletions)
+        insertions = 0
+        deletions = 0
+    levenshtein += max(insertions, deletions)
+    return levenshtein
+
   def diff_toDelta(self, diffs):
     """Crush the diff into an encoded string which describes the operations
     required to transform text1 into text2.
@@ -1127,7 +1153,7 @@ class diff_match_patch:
       loc: The location to search around.
 
     Returns:
-      Best match index or None.
+      Best match index or -1.
     """
     loc = max(0, min(loc, len(text) - len(pattern)))
     if text == pattern:
@@ -1135,7 +1161,7 @@ class diff_match_patch:
       return 0
     elif not text:
       # Nothing to match.
-      return None
+      return -1
     elif text[loc:loc + len(pattern)] == pattern:
       # Perfect match at the perfect spot!  (Includes case of null pattern)
       return loc
@@ -1154,11 +1180,11 @@ class diff_match_patch:
       loc: The location to search around.
 
     Returns:
-      Best match index or None.
+      Best match index or -1.
     """
     # Python doesn't have a maxint limit, so ignore this check.
-    #assert (self.Match_MaxBits == 0 or len(pattern) <= self.Match_MaxBits,
-    #        "Pattern too long for this application.")
+    #if self.Match_MaxBits != 0 and len(pattern) > self.Match_MaxBits:
+    #  raise ValueError("Pattern too long for this application.")
 
     # Initialise the alphabet.
     s = self.match_alphabet(pattern)
@@ -1196,7 +1222,7 @@ class diff_match_patch:
 
     # Initialise the bit arrays.
     matchmask = 1 << (len(pattern) - 1)
-    best_loc = None
+    best_loc = -1
 
     bin_max = max(loc + loc, len(text))
     # Empty initialization added to appease pychecker.
@@ -1357,7 +1383,7 @@ class diff_match_patch:
       text1 = a
       diffs = c
     else:
-      assert (False, "Unknown call format to patch_make.")
+      raise ValueError("Unknown call format to patch_make.")
 
     if not diffs:
       return []  # Get rid of the None case.
@@ -1471,7 +1497,7 @@ class diff_match_patch:
       expected_loc = patch.start2 + delta
       text1 = self.diff_text1(patch.diffs)
       start_loc = self.match_main(text, text1, expected_loc)
-      if start_loc is None:
+      if start_loc == -1:
         # No match found.  :(
         results.append(False)
       else:

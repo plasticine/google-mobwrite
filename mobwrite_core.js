@@ -40,7 +40,7 @@ mobwrite.syncGateway = '/scripts/q.py';
  * Max size of remote JSON-P gets.
  * @type {number}
  */
-mobwrite.get_maxchars = 200;
+mobwrite.get_maxchars = 1000;
 
 
 /**
