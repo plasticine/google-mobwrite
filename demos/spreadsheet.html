@@ -36,13 +36,19 @@ INPUT {
 <SCRIPT SRC="../mobwrite_form.js"></SCRIPT>
 -->
 </HEAD>
-<BODY ONLOAD="mobwrite.share('demo_spreadsheet');">
 
-<TR><TD HEIGHT=1><H1>MobWrite as a Collaborative Spreadsheet</H1></TD></TR>
+<!--
+Note that in this demo a common idPrefix is defined.  This means that each
+field is actually shared as 'demo_spreadsheet_cell2_4' instead of 'cell2_4'.
+-->
+
+<BODY ONLOAD="mobwrite.idPrefix = 'demo_spreadsheet_'; mobwrite.share('demo_spreadsheet');">
+
+<H1>MobWrite as a Collaborative Spreadsheet</H1>
 
 <FORM ID="demo_spreadsheet" ONSUBMIT="return false">
 <TABLE WIDTH="50%">
-<SCRIPT><!--
+<SCRIPT>
 var cols = 5;
 var rows = 10;
 
@@ -60,7 +66,7 @@ document.write('</TR>\n');
 for (var y = 1; y <= rows; y++) {
   document.write('<TR><TD CLASS="left" ID="left_' + y + '">' + y + '</TD>');
   for (var x = 1; x <= cols; x++) {
-    document.write('<TD><INPUT ID="demo_spreadsheet_' + x + '_' + y + '" ONFOCUS="highlight(this.id, true)" ONBLUR="highlight(this.id, false)"></TD>');
+    document.write('<TD><INPUT ID="cell' + x + '_' + y + '" ONFOCUS="highlight(this.id, true)" ONBLUR="highlight(this.id, false)"></TD>');
   }
   document.write('</TR>\n');
 }
@@ -79,8 +85,7 @@ function highlight(id, on) {
   }
 }
 
-
-//--></SCRIPT>
+</SCRIPT>
 </TABLE>
 </FORM>
 

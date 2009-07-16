@@ -678,19 +678,19 @@ D:1:=3
     Send a three-part buffer out of order (2, 3, 1) and verify correct assembly.
     </DESCRIPTION>
     <QUESTION>
-b:testbuffer1 3 2 f%3A0%3Aunittest[RANDOM]%0A
+b:testbuffer1 3 2 3Aunittest[RANDOM]%0AR%3
 
     </QUESTION>
     <ANSWER>
     </ANSWER>
     <QUESTION>
-b:testbuffer1 3 3 R%3A0%3AHello world%0A
+b:testbuffer1 3 3 A0%3AHello world%0A
 
     </QUESTION>
     <ANSWER>
     </ANSWER>
     <QUESTION>
-b:testbuffer1 3 1 U%3Auser[RANDOM]%0A
+b:testbuffer1 3 1 U%3Auser[RANDOM]%0Af%3A0%
 
     </QUESTION>
     <ANSWER>

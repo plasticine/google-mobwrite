@@ -167,6 +167,30 @@
       }
       
 
+      function testSplitBlocks() {
+        // Temporarily replace uniqueId with something more deterministic.
+        var orig_uniqueId = mobwrite.uniqueId;
+        mobwrite.uniqueId = function() { return 'abcdefgh'; };
+
+        mobwrite.syncGateway = 'http://example.com/q.py'; // 23 chars
+        var text = 'The quick brown fox jumps over the lazy dog?';
+        mobwrite.get_maxchars = 72;
+        var blocks = mobwrite.splitBlocks_(text);
+        assertEquals('http://example.com/q.py?p=The+quick+brown+fox+jumps+over+the+lazy+dog%3F', blocks[0]);
+
+        mobwrite.get_maxchars = 71;
+        blocks = mobwrite.splitBlocks_(text);
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+4+1+The%2520quick%2520bro%0A%0A', blocks[0]);
+        // Note that this block is shorter to avoid splitting the '%25'.
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+4+2+wn%2520fox%2520jumps%0A%0A', blocks[1]);
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+4+3+%2520over%2520the%252%0A%0A', blocks[2]);
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+4+4+0lazy%2520dog%253F%0A%0A', blocks[3]);
+
+        // Restore uniqueId
+        mobwrite.uniqueId = orig_uniqueId;
+      }
+
+
       // FORM TEST FUNCTIONS
 
 
@@ -348,9 +372,9 @@
 
 
       function runTests() {
-        tests = ['testUniqueId', 'testComputeSyncInterval', 'testValidNode',
-            'testShareHandler', 'testNormalizeLinebreaks', 'testCursor',
-            'testMergeType'];
+        tests = ['testUniqueId', 'testComputeSyncInterval', 'testSplitBlocks',
+            'testValidNode', 'testShareHandler', 'testNormalizeLinebreaks',
+            'testCursor', 'testMergeType'];
         for (var x = 0; x < tests.length; x++) {
           document.write('<H3>' + tests[x] + ':</H3>');
           eval(tests[x] + '()');

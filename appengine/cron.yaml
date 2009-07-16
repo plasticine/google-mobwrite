@@ -1,4 +1,4 @@
 cron:
 - description: Cleanup task
   url: /scripts/q.py?clean=1
-  schedule: every 1 hours
+  schedule: every 1 minutes

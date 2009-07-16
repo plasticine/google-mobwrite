@@ -451,36 +451,20 @@ mobwrite.syncRun1_ = function() {
     var script;
     while (script = document.getElementById('mobwrite_sync')) {
       script.parentNode.removeChild(script);
-    }
-    var blocks = [];
-    if (data.length > mobwrite.get_maxchars) {
-      // Break the data into small blocks.
-      // Compute number of blocks.
-      var bufferBlocks = Math.ceil(data.length / mobwrite.get_maxchars);
-      // Compute length of each block.
-      var blockLength = Math.ceil(data.length / bufferBlocks);
-      // Obtain a random ID for this buffer.
-      var bufferHeader = 'b:' + mobwrite.uniqueId() + ' ' + bufferBlocks + ' ';
-      for (var x = 1; x <= bufferBlocks; x++) {
-        var bufferData =
-            encodeURIComponent(data.substring((x - 1) * blockLength,
-                               x * blockLength));
-        var block = bufferHeader + x + ' ' + bufferData + '\n\n';
-        blocks.push('p=' + encodeURIComponent(block));
+      // Browsers won't garbage collect this object.
+      // So castrate it to avoid a major memory leak.
+      for (var prop in script) {
+        delete script[prop];
       }
-    } else {
-      // Encode to a URL.
-      blocks = ['p=' + encodeURIComponent(data)];
     }
+    var blocks = mobwrite.splitBlocks_(data);
     // Add a script tag to the head.
     var head = document.getElementsByTagName('head')[0];
     for (var x = 0; x < blocks.length; x++) {
       script = document.createElement('script');
       script.type = 'text/javascript';
       script.charset = 'utf-8';
-      // Add a uniqueId for cache-busting purposes.
-      script.src =
-          mobwrite.syncGateway + '?' + blocks[x] + '&c=' + mobwrite.uniqueId();
+      script.src = blocks[x];
       script.id = 'mobwrite_sync';
       head.appendChild(script);
     }
@@ -496,7 +480,66 @@ mobwrite.syncRun1_ = function() {
 
 
 /**
+ * Encode protocol data into JSONP URLs.  Split into multiple URLs if needed.
+ * @param {string} data MobWrite protocol data.
+ * @return {Array.<string>} Protocol data split into smaller strings.
+ * @private
+ */
+mobwrite.splitBlocks_ = function(data) {
+  var encData = encodeURIComponent(data);
+  var encPlusData = encData.replace(/%20/g, '+');
+  var prefix = mobwrite.syncGateway + '?p=';
+  var maxchars = mobwrite.get_maxchars - prefix.length;
+  if (encPlusData.length <= maxchars) {
+    // Encode as single URL.
+    return [prefix + encPlusData];
+  }
+
+  // Break the data into small blocks.
+  var blocks = [];
+  // Encode the data again because it is being wrapped into another shell.
+  data = encodeURIComponent(encData);
+  // Estimate the size of the overhead for each block.
+  var paddingSize = (prefix + 'b%3Aabcdefgh+12+4+' + '%0A%0A').length;
+  // Compute length available for each block.
+  var blockLength = mobwrite.get_maxchars - paddingSize;
+  if (blockLength < 10) {
+    if (mobwrite.debug) {
+      window.console.error('mobwrite.get_maxchars too small to send data.');
+    }
+    // Override this setting.
+    blockLength = 100;
+  }
+  // Compute number of blocks.
+  var bufferBlocks = Math.ceil(data.length / blockLength);
+  // Obtain a random ID for this buffer.
+  var bufferHeader = 'b%3A' + mobwrite.uniqueId() + '+' +
+      encodeURIComponent(bufferBlocks) + '+';
+  var startPointer = 0;
+  for (var x = 1; x <= bufferBlocks; x++) {
+    var endPointer = startPointer + blockLength;
+    if (x == bufferBlocks) {
+      // Last block, just slurp the remainder.
+      endPointer = data.length;
+    } else {
+      // Don't split a '%25' construct.
+      if (data.charAt(endPointer - 1) == '%') {
+        endPointer -= 1;
+      } else if (data.charAt(endPointer - 2) == '%') {
+        endPointer -= 2;
+      }
+    }
+    var bufferData = data.substring(startPointer, endPointer);
+    blocks.push(prefix + bufferHeader + x + '+' + bufferData + '%0A%0A');
+    startPointer = endPointer;
+  }
+  return blocks;
+};
+
+
+/**
  * Callback location for JSON-P requests.
+ * @param {string} text Raw content from server.
  */
 mobwrite.callback = function(text) {
   // Only process the response if there is a response (don't schedule a new
@@ -516,6 +559,7 @@ mobwrite.callback = function(text) {
 
 /**
  * Parse all server-side changes and distribute them to the shared objects.
+ * @param {string} text Raw content from server.
  * @private
  */
 mobwrite.syncRun2_ = function(text) {
