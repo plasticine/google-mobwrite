@@ -180,11 +180,25 @@
 
         mobwrite.get_maxchars = 71;
         blocks = mobwrite.splitBlocks_(text);
-        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+4+1+The%2520quick%2520bro%0A%0A', blocks[0]);
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+4+1+The%2520quick%2520brow%0A%0A', blocks[0]);
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+4+2+n%2520fox%2520jumps%25%0A%0A', blocks[1]);
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+4+3+20over%2520the%2520laz%0A%0A', blocks[2]);
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+4+4+y%2520dog%253F%0A%0A', blocks[3]);
+
+        mobwrite.get_maxchars = 69;
+        blocks = mobwrite.splitBlocks_(text);
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+5+1+The%2520quick%2520br%0A%0A', blocks[0]);
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+5+2+own%2520fox%2520jump%0A%0A', blocks[1]);
         // Note that this block is shorter to avoid splitting the '%25'.
-        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+4+2+wn%2520fox%2520jumps%0A%0A', blocks[1]);
-        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+4+3+%2520over%2520the%252%0A%0A', blocks[2]);
-        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+4+4+0lazy%2520dog%253F%0A%0A', blocks[3]);
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+5+3+s%2520over%2520the%0A%0A', blocks[2]);
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+5+4+%2520lazy%2520dog%25%0A%0A', blocks[3]);
+        // Note that this block is unexpectedly added due rollover from the unsplit '%25'.
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+5+5+3F%0A%0A', blocks[4]);
+
+        // Ensure that an even ending doesn't generate a blank extra block.
+        mobwrite.get_maxchars = 54;
+        blocks = mobwrite.splitBlocks_('123451234512345123451234512345');
+        assertEquals('http://example.com/q.py?p=b%3Aabcdefgh+6+6+12345%0A%0A', blocks[5]);
 
         // Restore uniqueId
         mobwrite.uniqueId = orig_uniqueId;
@@ -390,6 +404,7 @@
     subsequent tests often rely on earlier ones.</P>
 
     <script type="text/javascript"><!--
+      mobwrite.debug = true;
       var start_time = (new Date()).getTime();
       runTests();
       var end_time = (new Date()).getTime();

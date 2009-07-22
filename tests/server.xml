@@ -740,10 +740,10 @@ D:0:=11
     Only the latter should return an answer.
     </DESCRIPTION>
     <QUESTION>
-b:testbuffer4 0 0 u%3Auser[RANDOM]%0Af%3A0%3Aunittest[RANDOM]a%0AR%3A0%3AHello world%0A
-b:testbuffer5 0 1 u%3Auser[RANDOM]%0Af%3A0%3Aunittest[RANDOM]b%0AR%3A0%3AHello world%0A
-b:testbuffer6 1 2 u%3Auser[RANDOM]%0Af%3A0%3Aunittest[RANDOM]c%0AR%3A0%3AHello world%0A
-b:testbuffer7 1 1 u%3Auser[RANDOM]%0Af%3A0%3Aunittest[RANDOM]d%0AR%3A0%3AHello world%0A
+b:testbuffer5 0 0 u%3Auser[RANDOM]%0Af%3A0%3Aunittest[RANDOM]a%0AR%3A0%3AHello world%0A
+b:testbuffer6 0 1 u%3Auser[RANDOM]%0Af%3A0%3Aunittest[RANDOM]b%0AR%3A0%3AHello world%0A
+b:testbuffer7 1 2 u%3Auser[RANDOM]%0Af%3A0%3Aunittest[RANDOM]c%0AR%3A0%3AHello world%0A
+b:testbuffer8 1 1 u%3Auser[RANDOM]%0Af%3A0%3Aunittest[RANDOM]d%0AR%3A0%3AHello world%0A
 
     </QUESTION>
     <ANSWER>

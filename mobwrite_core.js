@@ -218,7 +218,7 @@ mobwrite.shareHandlers = [];
 
 /**
  * Prototype of shared object.
- * @param {string} id Unique file ID
+ * @param {string} id Unique file ID.
  * @constructor
  */
 mobwrite.shareObj = function(id) {
@@ -285,7 +285,7 @@ mobwrite.shareObj.prototype.getClientText = function() {
 
 /**
  * Set the user's text based on the provided plaintext.
- * @param {string} text New text
+ * @param {string} text New text.
  */
 mobwrite.shareObj.prototype.setClientText = function(text) {
   window.alert('Defined by subclass');
@@ -294,7 +294,7 @@ mobwrite.shareObj.prototype.setClientText = function(text) {
 
 /**
  * Modify the user's plaintext by applying a series of patches against it.
- * @param {Array.<patch_obj>} patches Array of Patch objects
+ * @param {Array.<patch_obj>} patches Array of Patch objects.
  */
 mobwrite.shareObj.prototype.patchClientText = function(patches) {
   var oldClientText = this.getClientText();
@@ -310,7 +310,7 @@ mobwrite.shareObj.prototype.patchClientText = function(patches) {
 
 /**
  * Notification of when a diff was sent to the server.
- * @param {Array.<Array.<*>>} diffs Array of diff tuples
+ * @param {Array.<Array.<*>>} diffs Array of diff tuples.
  */
 mobwrite.shareObj.prototype.onSentDiff = function(diffs) {
   // Potential hook for subclass.
@@ -320,7 +320,7 @@ mobwrite.shareObj.prototype.onSentDiff = function(diffs) {
 /**
  * Fire a synthetic 'change' event to a target element.
  * Notifies an element that its contents have been changed.
- * @param {Object} target Element to notify
+ * @param {Object} target Element to notify.
  */
 mobwrite.shareObj.prototype.fireChange = function(target) {
   if ('createEvent' in document) {  // W3
@@ -482,56 +482,71 @@ mobwrite.syncRun1_ = function() {
 /**
  * Encode protocol data into JSONP URLs.  Split into multiple URLs if needed.
  * @param {string} data MobWrite protocol data.
+ * @param {number} opt_minBlocks There will be at least this many blocks.
  * @return {Array.<string>} Protocol data split into smaller strings.
  * @private
  */
-mobwrite.splitBlocks_ = function(data) {
+mobwrite.splitBlocks_ = function(data, opt_minBlocks) {
   var encData = encodeURIComponent(data);
-  var encPlusData = encData.replace(/%20/g, '+');
   var prefix = mobwrite.syncGateway + '?p=';
   var maxchars = mobwrite.get_maxchars - prefix.length;
+  var encPlusData = encData.replace(/%20/g, '+');
   if (encPlusData.length <= maxchars) {
     // Encode as single URL.
     return [prefix + encPlusData];
   }
 
+  // Digits is the number of characters needed to encode the number of blocks.
+  var digits = 1;
+  if (typeof opt_minBlocks != 'undefined') {
+    digits = String(opt_minBlocks).length;
+  }
+
   // Break the data into small blocks.
   var blocks = [];
   // Encode the data again because it is being wrapped into another shell.
-  data = encodeURIComponent(encData);
-  // Estimate the size of the overhead for each block.
-  var paddingSize = (prefix + 'b%3Aabcdefgh+12+4+' + '%0A%0A').length;
+  encEncData = encodeURIComponent(encData);
+  // Compute the size of the overhead for each block.
+  // Small bug: if there are 10+ blocks, we reserve but don't use one extra
+  // byte for blocks 1-9.
+  var id = mobwrite.uniqueId();
+  var paddingSize = (prefix + 'b%3A' + id + '+++' + '%0A%0A').length +
+      2 * digits;
   // Compute length available for each block.
   var blockLength = mobwrite.get_maxchars - paddingSize;
-  if (blockLength < 10) {
+  if (blockLength < 3) {
     if (mobwrite.debug) {
       window.console.error('mobwrite.get_maxchars too small to send data.');
     }
-    // Override this setting.
-    blockLength = 100;
+    // Override this setting (3 is minimum to send the indivisible '%25').
+    blockLength = 3;
   }
   // Compute number of blocks.
-  var bufferBlocks = Math.ceil(data.length / blockLength);
+  var bufferBlocks = Math.ceil(encEncData.length / blockLength);
+  if (typeof opt_minBlocks != 'undefined') {
+    bufferBlocks = Math.max(bufferBlocks, opt_minBlocks);
+  }
   // Obtain a random ID for this buffer.
-  var bufferHeader = 'b%3A' + mobwrite.uniqueId() + '+' +
+  var bufferHeader = 'b%3A' + id + '+' +
       encodeURIComponent(bufferBlocks) + '+';
   var startPointer = 0;
   for (var x = 1; x <= bufferBlocks; x++) {
     var endPointer = startPointer + blockLength;
-    if (x == bufferBlocks) {
-      // Last block, just slurp the remainder.
-      endPointer = data.length;
-    } else {
-      // Don't split a '%25' construct.
-      if (data.charAt(endPointer - 1) == '%') {
-        endPointer -= 1;
-      } else if (data.charAt(endPointer - 2) == '%') {
-        endPointer -= 2;
-      }
+    // Don't split a '%25' construct.
+    if (encEncData.charAt(endPointer - 1) == '%') {
+      endPointer -= 1;
+    } else if (encEncData.charAt(endPointer - 2) == '%') {
+      endPointer -= 2;
     }
-    var bufferData = data.substring(startPointer, endPointer);
+    var bufferData = encEncData.substring(startPointer, endPointer);
     blocks.push(prefix + bufferHeader + x + '+' + bufferData + '%0A%0A');
     startPointer = endPointer;
+  }
+  if (startPointer < encEncData.length) {
+    if (mobwrite.debug) {
+      window.console.debug('Recursing splitBlocks_ at n=' + (bufferBlocks + 1));
+    }
+    return this.splitBlocks_(data, bufferBlocks + 1);
   }
   return blocks;
 };
@@ -600,7 +615,7 @@ mobwrite.syncRun2_ = function(text) {
     var version;
     if ('FfDdRr'.indexOf(name) != -1) {
       var div = value.indexOf(':');
-      if (!div) {
+      if (div < 1) {
         if (mobwrite.debug) {
           window.console.error('No version number: ' + line);
         }
@@ -713,7 +728,7 @@ mobwrite.syncRun2_ = function(text) {
               file.setClientText(file.shadowText);
             } else {
               // Merge text.
-              var patches = file.dmp.patch_make(file.shadowText, '', diffs);
+              var patches = file.dmp.patch_make(file.shadowText, diffs);
               // First shadowText.  Should be guaranteed to work.
               var serverResult = file.dmp.patch_apply(patches, file.shadowText);
               file.shadowText = serverResult[0];
@@ -792,9 +807,9 @@ mobwrite.syncKill_ = function() {
 
 /**
  * Initiate an Ajax network connection.
- * @param {string} url Location to send request
- * @param {string} post Data to be sent
- * @param {Function} callback Function to be called when response arrives
+ * @param {string} url Location to send request.
+ * @param {string} post Data to be sent.
+ * @param {Function} callback Function to be called when response arrives.
  * @return {Object?} New Ajax object or null if failure.
  * @private
  */
@@ -831,7 +846,7 @@ mobwrite.syncLoadAjax_ = function(url, post, callback) {
 
 /**
  * Callback function for Ajax request.  Checks network response was ok,
- * then calls mobwrite.syncRun2_
+ * then calls mobwrite.syncRun2_.
  * @private
  */
 mobwrite.syncCheckAjax_ = function() {
@@ -884,7 +899,7 @@ if (window.addEventListener) {  // W3
 
 /**
  * Start sharing the specified object(s).
- * @param {*} var_args Object(s) or ID(s) of object(s) to share
+ * @param {*} var_args Object(s) or ID(s) of object(s) to share.
  */
 mobwrite.share = function(var_args) {
   for (var i = 0; i < arguments.length; i++) {
@@ -905,12 +920,19 @@ mobwrite.share = function(var_args) {
       }
       mobwrite.shared[result.file] = result;
 
-      // Startup the main task if it doesn't aleady exist.
       if (mobwrite.syncRunPid_ == null) {
-        mobwrite.syncRunPid_ = window.setTimeout(mobwrite.syncRun1_, 10);
+        // Startup the main task if it doesn't already exist.
         if (mobwrite.debug) {
           window.console.info('MobWrite task started.');
         }
+      } else {
+        // Bring sync forward in time.
+        window.clearTimeout(mobwrite.syncRunPid_);
+      }
+      mobwrite.syncRunPid_ = window.setTimeout(mobwrite.syncRun1_, 10);
+    } else {
+      if (mobwrite.debug) {
+        window.console.warn('Share: Unknown widget type: ' + el + '.');
       }
     }
   }
@@ -920,22 +942,40 @@ mobwrite.share = function(var_args) {
 /**
  * Stop sharing the specified object(s).
  * Does not handle forms recursively.
- * @param {*} var_args Object(s) or ID(s) of object(s) to share
+ * @param {*} var_args Object(s) or ID(s) of object(s) to unshare.
  */
 mobwrite.unshare = function(var_args) {
   for (var i = 0; i < arguments.length; i++) {
     var el = arguments[i];
-    if (typeof el == 'object' && 'id' in el) {
-      el = el.id;
-    }
-    if (typeof el == 'string') {
-      if (mobwrite.shared.hasOwnProperty(el)) {
-        delete mobwrite.shared[el];
+    if (typeof el == 'string' && mobwrite.shared.hasOwnProperty(el)) {
+      delete mobwrite.shared[el];
+      if (mobwrite.debug) {
+        window.console.info('Unshared: ' + el);
+      }
+    } else {
+      // Pretend to want to share this object, acquire a new shareObj, then use
+      // its ID to locate and kill the existing shareObj that's already shared.
+      var result = null;
+      // Ask every registered handler if it knows what to do with this object.
+      for (var x = 0; x < mobwrite.shareHandlers.length && !result; x++) {
+        result = mobwrite.shareHandlers[x].call(mobwrite, el);
+      }
+      if (result && result.file) {
+        if (mobwrite.shared.hasOwnProperty(result.file)) {
+          delete mobwrite.shared[result.file];
+          if (mobwrite.debug) {
+            window.console.info('Unshared: ' + el);
+          }
+        } else {
+          if (mobwrite.debug) {
+            window.console.warn('Ignoring ' + el + '. Not currently shared.');
+          }
+        }
+      } else {
         if (mobwrite.debug) {
-          window.console.info('Unshared: ' + el);
+          window.console.warn('Unshare: Unknown widget type: ' + el + '.');
         }
       }
     }
   }
 };
-
