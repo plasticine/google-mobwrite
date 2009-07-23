@@ -70,7 +70,7 @@ class TextObj(mobwrite_core.TextObj, db.Model):
 
     if self.changed:
       self.put()
-      if newtext == None:
+      if newtext is None:
         mobwrite_core.LOG.debug("Nullified TextObj: '%s'" % self.key().name())
       else:
         mobwrite_core.LOG.debug("Saved %db TextObj: '%s'" %
@@ -85,7 +85,7 @@ class TextObj(mobwrite_core.TextObj, db.Model):
 def fetchText(name):
   filename = TextObj.safe_name(name)
   textobj = TextObj.get_or_insert(filename)
-  if textobj.text == None:
+  if textobj.text is None:
     mobwrite_core.LOG.debug("Loaded null TextObj: '%s'" % filename)
   else:
     mobwrite_core.LOG.debug("Loaded %db TextObj: '%s'" %
@@ -152,18 +152,6 @@ def fetchUserViews(username):
   return views
 
 
-class BufferObj(db.Model):
-  # An object which assembles large commands from fragments.
-
-  # Object properties:
-  # [key] - The name (and size) of the buffer, e.g. '_alpha_12'
-  # .data - The contents of the buffer.
-  # .lasttime - The last time that this buffer was modified.
-
-  data = db.StringListProperty()
-  lasttime = db.DateTimeProperty(auto_now=True)
-
-
 class AppEngineMobWrite(mobwrite_core.MobWrite):
 
   def feedBuffer(self, name, size, index, datum):
@@ -206,7 +194,7 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
           data_array = []
           for index in xrange(1, size + 1):
             datum = data_map.get(str(index))
-            if datum == None:
+            if datum is None:
               mobwrite_core.LOG.critical("Memcache buffer '%s' does not contain element %d."
                   % (namespace, index))
               return ""
@@ -223,12 +211,13 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
       while 1:
         results = query.fetch(maxlimit)
         print "Deleting %d %s(s)." % (len(results), name)
-        db.delete(results)
+        if results:
+          db.delete(results)
         if len(results) != maxlimit:
           break
 
     mobwrite_core.LOG.info("Cleaning database")
-    maxlimit = 1000
+    maxlimit = 50
     try:
       # Delete any view which hasn't been written to in a while.
       limit = datetime.datetime.now() - mobwrite_core.TIMEOUT_VIEW
@@ -242,7 +231,10 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
       mobwrite_core.LOG.info("Database clean")
     except runtime.DeadlineExceededError:
       print "Cleanup only partially complete.  Deadline exceeded."
-      mobwrite_core.LOG.warning("Database only partially cleaned")
+      mobwrite_core.LOG.warning("Database only partially cleaned. (DeadlineExceededError)")
+    except db.Timeout:
+      print "Cleanup only partially complete.  Database timeout."
+      mobwrite_core.LOG.warning("Database only partially cleaned. (Timeout)")
 
   def handleRequest(self, text):
     actions = self.parseRequest(text)
@@ -250,9 +242,9 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
 
   def doActions(self, actions):
     output = []
+    viewobj = None
     last_username = None
     last_filename = None
-    viewobj = None
     user_views = None
 
     for action_index in xrange(len(actions)):
@@ -328,7 +320,7 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
         # Textobj transaction not needed; in a collision here data-loss is
         # inevitable anyway.
         textobj = viewobj.textobj
-        if action["force"] or textobj.text == None:
+        if action["force"] or textobj.text is None:
           # Clobber the server's text.
           if textobj.text != data:
             textobj.setText(data)
@@ -404,7 +396,7 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
     stack = self.stringToStack(viewobj.edit_stack)
 
     if delta_ok:
-      if mastertext == None:
+      if mastertext is None:
         mastertext = ""
       # Create the diff between the view's text and the master text.
       diffs = mobwrite_core.DMP.diff_main(viewobj.shadow, mastertext)
@@ -429,7 +421,7 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
       # Error; server could not parse client's delta.
       # Send a raw dump of the text.
       viewobj.shadow_client_version += 1
-      if mastertext == None:
+      if mastertext is None:
         mastertext = ""
         stack.append((viewobj.shadow_server_version,
             "r:%d:\n" % viewobj.shadow_server_version))
@@ -489,7 +481,7 @@ def main():
     value = value.replace("\n", "\\n").replace("\r", "\\r")
     print "mobwrite.callback(\"%s\");" % value
   elif form.has_key("clean"):
-    # External cron job to clean the database.
+    # Cron job to clean the database.
     print "Content-Type: text/plain"
     print ""
     mobwrite.cleanup()

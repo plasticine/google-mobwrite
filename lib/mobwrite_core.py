@@ -22,10 +22,10 @@ limitations under the License.
 
 __author__ = "fraser@google.com (Neil Fraser)"
 
-import re
+import datetime
 import diff_match_patch as dmp_module
 import logging
-import datetime
+import re
 
 # Global Diff/Match/Patch object.
 DMP = dmp_module.diff_match_patch()
@@ -248,7 +248,7 @@ class MobWrite:
 
     # Second, deal with the server's text.
     textobj = viewobj.textobj
-    if textobj.text == None:
+    if textobj.text is None:
       # A view is sending a valid delta on a file we've never heard of.
       textobj.setText(viewobj.shadow)
       action["force"] = False

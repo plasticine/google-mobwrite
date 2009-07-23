@@ -173,7 +173,7 @@ class TextObj(mobwrite_core.TextObj):
     if STORAGE_MODE == FILE:
       # Save the text to disk.
       filename = "%s/%s.txt" % (DATA_DIR, urllib.quote(self.name, ''))
-      if self.text == None:
+      if self.text is None:
         # Nullified text equates to no file.
         if os.path.exists(filename):
           try:
@@ -193,7 +193,7 @@ class TextObj(mobwrite_core.TextObj):
 
     if STORAGE_MODE == BDB:
       # Save the text to database.
-      if self.text == None:
+      if self.text is None:
         if lasttime_db.has_key(self.name):
           del lasttime_db[self.name]
         if texts_db.has_key(self.name):
@@ -416,7 +416,7 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
       # Check if Buffer is complete.
       text = bufferobj.get()
       bufferobj.lock.release()
-      if text == None:
+      if text is None:
         text = ""
     return urllib.unquote(text)
 
@@ -452,9 +452,9 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
 
   def doActions(self, actions):
     output = []
+    viewobj = None
     last_username = None
     last_filename = None
-    viewobj = None
 
     for action_index in xrange(len(actions)):
       # Use an indexed loop in order to peek ahead one step to detect
@@ -464,7 +464,7 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
       # Fetch the requested view object.
       if not viewobj:
         viewobj = fetch_viewobj(action["username"], action["filename"])
-        if viewobj == None:
+        if viewobj is None:
           # Too many views connected at once.
           # Send back nothing.  Pretend the return packet was lost.
           return ""
@@ -515,7 +515,7 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
         viewobj.backup_shadow = viewobj.shadow
         viewobj.backup_shadow_server_version = viewobj.shadow_server_version
         viewobj.edit_stack = []
-        if action["force"] or textobj.text == None:
+        if action["force"] or textobj.text is None:
           # Clobber the server's text.
           textobj.lock.acquire()
           if textobj.text != data:
@@ -590,7 +590,7 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
     mastertext = textobj.text
 
     if delta_ok:
-      if mastertext == None:
+      if mastertext is None:
         mastertext = ""
       # Create the diff between the view's text and the master text.
       diffs = mobwrite_core.DMP.diff_main(viewobj.shadow, mastertext)
@@ -615,7 +615,7 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
       # Error; server could not parse client's delta.
       # Send a raw dump of the text.
       viewobj.shadow_client_version += 1
-      if mastertext == None:
+      if mastertext is None:
         mastertext = ""
         viewobj.edit_stack.append((viewobj.shadow_server_version,
             "r:%d:\n" % viewobj.shadow_server_version))
