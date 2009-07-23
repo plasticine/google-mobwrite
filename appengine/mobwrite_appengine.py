@@ -32,6 +32,7 @@ import urllib
 
 from google.appengine.ext import db
 from google.appengine import runtime
+from google.appengine.api import memcache
 
 sys.path.insert(0, "lib")
 import mobwrite_core
@@ -179,42 +180,42 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
       String with all the text blocks merged in the correct order.  Or if the
       buffer is not yet complete returns the empty string.
     """
+    text = ""
     if not 0 < index <= size:
       mobwrite_core.LOG.error("Invalid buffer: '%s %d %d'" % (name, size, index))
-      text = ""
     elif size == 1 and index == 1:
       # A buffer with one slot?  Pointless.
       text = datum
       mobwrite_core.LOG.debug("Buffer with only one slot: '%s'" % name)
     else:
-      text = db.run_in_transaction(self.feedBufferTransaction, name, size, index, datum)
+      timeout = mobwrite_core.TIMEOUT_BUFFER.seconds
+      mc = memcache.Client()
+      namespace = "%s_%d" % (name, size)
+      # Save this buffer to memcache.
+      if mc.add(str(index), datum, time=timeout, namespace=namespace):
+        # Add a counter or increment it if it already exists.
+        counter = 1
+        if not mc.add("counter", counter, time=timeout, namespace=namespace):
+          counter = mc.incr("counter", namespace=namespace)
+        if counter == size:
+          # The buffer is complete.  Extract the data.
+          keys = []
+          for index in xrange(1, size + 1):
+            keys.append(str(index))
+          data_map = mc.get_multi(keys, namespace=namespace)
+          data_array = []
+          for index in xrange(1, size + 1):
+            datum = data_map.get(str(index))
+            if datum == None:
+              mobwrite_core.LOG.critical("Memcache buffer '%s' does not contain element %d."
+                  % (namespace, index))
+              return ""
+            data_array.append(datum)
+          text = str("".join(data_array))
+          # Abandon the data, memcache will clean it up.
+      else:
+        mobwrite_core.LOG.warning("Duplicate packet for buffer '%s'." % namespace)
     return urllib.unquote(text)
-
-  def feedBufferTransaction(self, name, size, index, datum):
-    # Not thread safe -- must be wrapped in a transaction.
-    # DataStore doesn't like names starting with numbers.
-    name = "_%s_%d" % (name, size)
-    key = db.Key.from_path(BufferObj.kind(), name)
-    bufferobj = db.get(key)
-    # Should be zero or one result.
-    if bufferobj == None:
-      data = []
-      for x in xrange(size):
-        data.append("")
-      data[index - 1] = datum
-      bufferobj = BufferObj(key_name=name, data=data)
-      mobwrite_core.LOG.debug("Created new BufferObj: '%s' (%d)" % (name, index))
-    else:
-      bufferobj.data[index - 1] = datum
-      mobwrite_core.LOG.debug("Reloaded existing BufferObj: '%s' (%d)" % (name, index))
-    # Check if Buffer is complete.
-    if "" in bufferobj.data:
-      bufferobj.put()
-      return ""
-    # Strings are stored, but the DB returns it as Unicode.
-    text = str("".join(bufferobj.data))
-    bufferobj.delete()
-    return text
 
   def cleanup(self):
     def cleanTable(name, limit):
@@ -236,10 +237,6 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
       # Delete any text which hasn't been written to in a while.
       limit = datetime.datetime.now() - mobwrite_core.TIMEOUT_TEXT
       cleanTable("TextObj", limit)
-
-      # Delete any buffer which hasn't been written to in a while.
-      limit = datetime.datetime.now() - mobwrite_core.TIMEOUT_BUFFER
-      cleanTable("BufferObj", limit)
 
       print "Database clean."
       mobwrite_core.LOG.info("Database clean")
