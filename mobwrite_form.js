@@ -227,7 +227,7 @@ mobwrite.shareSelectObj.prototype.getClientText = function() {
       selected.push(option.value);
     }
   }
-  return selected.join('\00');
+  return selected.join('\0');
 };
 
 
@@ -236,9 +236,9 @@ mobwrite.shareSelectObj.prototype.getClientText = function() {
  * @param {string} text New content
  */
 mobwrite.shareSelectObj.prototype.setClientText = function(text) {
-  text = '\00' + text + '\00';
+  text = '\0' + text + '\0';
   for (var x = 0, option; option = this.element.options[x]; x++) {
-    option.selected = (text.indexOf('\00' + option.value + '\00') != -1);
+    option.selected = (text.indexOf('\0' + option.value + '\0') != -1);
   }
   this.fireChange(this.element);
 };
@@ -299,7 +299,7 @@ mobwrite.shareRadioObj.prototype.getClientText = function() {
   // Group of radio buttons
   for (var x = 0; x < this.elements.length; x++) {
     if (this.elements[x].checked) {
-      return this.elements[x].value
+      return this.elements[x].value;
     }
   }
   // Nothing checked.
@@ -404,8 +404,8 @@ mobwrite.shareTextareaObj.prototype.setClientText = function(text) {
  */
 mobwrite.shareTextareaObj.prototype.patchClientText = function(patches) {
   // Set some constants which tweak the matching behaviour.
-  // Tweak the relative importance (0.0 = accuracy, 1.0 = proximity)
-  this.dmp.Match_Balance = 0.5;
+  // Maximum distance to search from expected location.
+  this.dmp.Match_Balance = 1000;
   // At what point is no match declared (0.0 = perfection, 1.0 = very loose)
   this.dmp.Match_Threshold = 0.6;
 
@@ -532,15 +532,16 @@ mobwrite.shareTextareaObj.prototype.restoreCursor_ = function(cursor) {
 
   // Find the start of the selection in the new text.
   var pattern1 = cursor.startPrefix + cursor.startSuffix;
+  var pattern2, diff;
   var cursorStartPoint = this.dmp.match_main(newText, pattern1,
       Math.round(Math.max(0, Math.min(newText.length,
           cursor.startPercent * newText.length - padLength))));
   if (cursorStartPoint !== null) {
-    var pattern2 = newText.substring(cursorStartPoint,
-                                     cursorStartPoint + pattern1.length);
+    pattern2 = newText.substring(cursorStartPoint,
+                                 cursorStartPoint + pattern1.length);
     //alert(pattern1 + '\nvs\n' + pattern2);
     // Run a diff to get a framework of equivalent indicies.
-    var diff = this.dmp.diff_main(pattern1, pattern2, false);
+    diff = this.dmp.diff_main(pattern1, pattern2, false);
     cursorStartPoint += this.dmp.diff_xIndex(diff, cursor.startPrefix.length);
   }
 
@@ -552,11 +553,11 @@ mobwrite.shareTextareaObj.prototype.restoreCursor_ = function(cursor) {
         Math.round(Math.max(0, Math.min(newText.length,
             cursor.endPercent * newText.length - padLength))));
     if (cursorEndPoint !== null) {
-      var pattern2 = newText.substring(cursorEndPoint,
-                                       cursorEndPoint + pattern1.length);
+      pattern2 = newText.substring(cursorEndPoint,
+                                   cursorEndPoint + pattern1.length);
       //alert(pattern1 + '\nvs\n' + pattern2);
       // Run a diff to get a framework of equivalent indicies.
-      var diff = this.dmp.diff_main(pattern1, pattern2, false);
+      diff = this.dmp.diff_main(pattern1, pattern2, false);
       cursorEndPoint += this.dmp.diff_xIndex(diff, cursor.endPrefix.length);
     }
   }
@@ -571,7 +572,7 @@ mobwrite.shareTextareaObj.prototype.restoreCursor_ = function(cursor) {
     // Jump to the aproximate percentage point of start.
     cursorStartPoint = Math.round(cursor.startPercent * newText.length);
   }
-  if (cursorEndPoint == null) {
+  if (cursorEndPoint === null) {
     // End not known, collapse to start.
     cursorEndPoint = cursorStartPoint;
   }
@@ -640,9 +641,9 @@ mobwrite.shareTextareaObj.shareHandler = function(node) {
       node.type == 'text' || node.type == 'password')) {
     if (mobwrite.UA_webkit) {
       // Safari needs to track which text element has the focus.
-      node.addEventListener('focus', function() {this.activeElement = true},
+      node.addEventListener('focus', function() {this.activeElement = true;},
           false);
-      node.addEventListener('blur', function() {this.activeElement = false},
+      node.addEventListener('blur', function() {this.activeElement = false;},
           false);
       node.activeElement = false;
     }

@@ -376,13 +376,12 @@ mobwrite.shareObj.prototype.syncText = function() {
     // The last delta postback from the server to this shareObj didn't match.
     // Send a full text dump to get back in sync. This will result in any
     // changes since the last postback being wiped out. :(
-    data = clientText;
     if (this.shadowText != clientText) {
       this.shadowText = clientText;
     }
     this.clientVersion++;
     var action = 'r:' + this.clientVersion + ':' +
-                 encodeURI(data).replace(/%20/g, ' ');
+                 encodeURI(clientText).replace(/%20/g, ' ');
     // Append the action to the edit stack.
     this.editStack.push([this.clientVersion, action]);
   }
@@ -447,25 +446,31 @@ mobwrite.syncRun1_ = function() {
       window.setTimeout(mobwrite.syncKill_, mobwrite.timeoutInterval);
 
   if (remote) {
-    // Remove any old script tags.
-    var script;
-    while (script = document.getElementById('mobwrite_sync')) {
-      script.parentNode.removeChild(script);
-      // Browsers won't garbage collect this object.
-      // So castrate it to avoid a major memory leak.
-      for (var prop in script) {
-        delete script[prop];
-      }
-    }
     var blocks = mobwrite.splitBlocks_(data);
     // Add a script tag to the head.
     var head = document.getElementsByTagName('head')[0];
     for (var x = 0; x < blocks.length; x++) {
-      script = document.createElement('script');
-      script.type = 'text/javascript';
-      script.charset = 'utf-8';
+      var script = document.getElementById('mobwrite_sync' + x);
+      if (script) {
+        script.parentNode.removeChild(script);
+        // IE allows us to recycle a script tag.
+        // Other browsers need the old one destroyed and a new one created.
+        if (!mobwrite.UA_msie) {
+          // Browsers won't garbage collect the old script.
+          // So castrate it to avoid a major memory leak.
+          for (var prop in script) {
+            delete script[prop];
+          }
+          script = null;
+        }
+      }
+      if (!script) {
+        script = document.createElement('script');
+        script.type = 'text/javascript';
+        script.charset = 'utf-8';
+        script.id = 'mobwrite_sync' + x;
+      }
       script.src = blocks[x];
-      script.id = 'mobwrite_sync';
       head.appendChild(script);
     }
     // Execution will resume in mobwrite.callback();
@@ -631,7 +636,7 @@ mobwrite.syncRun2_ = function(text) {
       value = value.substring(div + 1);
     }
     if (name == 'F' || name == 'f') {
-      // FILE indicates which shared object following delta/raw applies to.
+      // File indicates which shared object following delta/raw applies to.
       if (value.substring(0, mobwrite.idPrefix.length) == mobwrite.idPrefix) {
         // Trim off the ID prefix.
         value = value.substring(mobwrite.idPrefix.length);
@@ -819,17 +824,17 @@ mobwrite.syncLoadAjax_ = function(url, post, callback) {
   if (window.XMLHttpRequest) {
     try {
       req = new XMLHttpRequest();
-    } catch(e) {
+    } catch(e1) {
       req = null;
     }
     // branch for IE/Windows ActiveX version
     } else if (window.ActiveXObject) {
     try {
       req = new ActiveXObject('Msxml2.XMLHTTP');
-    } catch(e) {
+    } catch(e2) {
       try {
         req = new ActiveXObject('Microsoft.XMLHTTP');
-      } catch(e) {
+      } catch(e3) {
       	req = null;
       }
     }
@@ -920,7 +925,7 @@ mobwrite.share = function(var_args) {
       }
       mobwrite.shared[result.file] = result;
 
-      if (mobwrite.syncRunPid_ == null) {
+      if (mobwrite.syncRunPid_ === null) {
         // Startup the main task if it doesn't already exist.
         if (mobwrite.debug) {
           window.console.info('MobWrite task started.');
