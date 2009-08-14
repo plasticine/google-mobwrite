@@ -124,7 +124,7 @@
         // There's a 1 in 4 trillion chance this test could fail normally.
         assertEquals(false, mobwrite.uniqueId() == mobwrite.uniqueId());
       }
-      
+
 
       function testComputeSyncInterval() {
         // Check 10% growth when no change.
@@ -165,7 +165,7 @@
         mobwrite.computeSyncInterval_();
         assertEquals(100, mobwrite.syncInterval);
       }
-      
+
 
       function testSplitBlocks() {
         // Temporarily replace uniqueId with something more deterministic.
@@ -309,7 +309,7 @@
         var cursor0 = {};
         cursor0.startPrefix = 'ells by the sea ';
         cursor0.startSuffix = 'shore.';
-        cursor0.startPercent = (77 + linebreak.length) / text.length;
+        cursor0.startOffset = 77 + linebreak.length;
         cursor0.collapsed = true;
         share.restoreCursor_(cursor0);
 
@@ -317,7 +317,7 @@
         var cursor1 = share.captureCursor_();
         assertEquals(cursor0.startPrefix, cursor1.startPrefix);
         assertEquals(cursor0.startSuffix, cursor1.startSuffix);
-        assertEquals(cursor0.startPercent, cursor1.startPercent);
+        assertEquals(cursor0.startOffset, cursor1.startOffset);
         assertEquals(cursor0.collapsed, cursor1.collapsed);
 
         // Fabricate a selection running from 'lazy' to 'sells' inclusive.
@@ -325,12 +325,12 @@
         cursor0.startPrefix = 'jumped over the ';
         cursor0.startSuffix = 'lazy dog.' + linebreak + 'She se';
         cursor0.startSuffix = cursor0.startSuffix.substring(0, 16);
-        cursor0.startPercent = 36 / text.length;
+        cursor0.startOffset = 36;
         cursor0.endPrefix = 'y dog.' + linebreak + 'She sells';
         cursor0.endPrefix = cursor0.endPrefix
             .substring(cursor0.endPrefix.length - 16);
         cursor0.endSuffix = ' sea shells by t';
-        cursor0.endPercent = (54 + linebreak.length) / text.length;
+        cursor0.endOffset = 54 + linebreak.length;
         cursor0.collapsed = false;
         share.restoreCursor_(cursor0);
 
@@ -338,28 +338,80 @@
         cursor1 = share.captureCursor_();
         assertEquals(cursor0.startPrefix, cursor1.startPrefix);
         assertEquals(cursor0.startSuffix, cursor1.startSuffix);
-        assertEquals(cursor0.startPercent, cursor1.startPercent);
+        assertEquals(cursor0.startOffset, cursor1.startOffset);
         assertEquals(cursor0.endPrefix, cursor1.endPrefix);
         assertEquals(cursor0.endSuffix, cursor1.endSuffix);
-        assertEquals(cursor0.endPercent, cursor1.endPercent);
+        assertEquals(cursor0.endOffset, cursor1.endOffset);
         assertEquals(cursor0.collapsed, cursor1.collapsed);
 
         // Tweak locations and verify fuzzy match.
         cursor1.startPrefix = 'jumped under the ';
         cursor1.startSuffix = 'crazy cats.\tShe';
-        cursor1.endPercent = 60 / text.length;
+        cursor1.endOffset = 60;
         share.restoreCursor_(cursor1);
         var cursor2 = share.captureCursor_();
         assertEquals(cursor0.startPrefix, cursor2.startPrefix);
         assertEquals(cursor0.startSuffix, cursor2.startSuffix);
-        assertEquals(cursor0.startPercent, cursor2.startPercent);
+        assertEquals(cursor0.startOffset, cursor2.startOffset);
         assertEquals(cursor0.endPrefix, cursor2.endPrefix);
         assertEquals(cursor0.endSuffix, cursor2.endSuffix);
-        assertEquals(cursor0.endPercent, cursor2.endPercent);
+        assertEquals(cursor0.endOffset, cursor2.endOffset);
         assertEquals(cursor0.collapsed, cursor2.collapsed);
 
         // Tear down the text area.
         document.body.removeChild(textarea);
+      }
+
+
+      function testPatchApply() {
+        // Create a shareTextareaObj.
+        var textarea = document.createElement('textarea');
+        textarea.id = 'test_textarea';
+        var share = new mobwrite.shareTextareaObj(textarea);
+
+        // Exact match
+        var patches = share.dmp.patch_make('The quick brown fox jumps over the lazy dog.', 'That quick brown fox jumped over a lazy dog.');
+        var offsets = [0, 2, 4, 23, 26, 30, 35, 100];
+        var result = share.patch_apply_(patches, 'The quick brown fox jumps over the lazy dog.', offsets);
+        assertEquals('That quick brown fox jumped over a lazy dog.', result);
+        assertEquivalent([0, 2, 5, 24, 28, 32, 35, 100], offsets);
+
+        // Partial match
+        result = share.patch_apply_(patches, 'The quick red rabbit jumps over the tired tiger.', offsets);
+        assertEquals('That quick red rabbit jumped over a tired tiger.', result);
+
+        // Failed match
+        result = share.patch_apply_(patches, 'I am the very model of a modern major general.', offsets);
+        assertEquals('I am the very model of a modern major general.', result);
+
+        // No side effects
+        patches = share.dmp.patch_make('', 'test');
+        var patchstr = share.dmp.patch_toText(patches);
+        share.patch_apply_(patches, '', offsets);
+        assertEquals(patchstr, share.dmp.patch_toText(patches));
+
+        // No side effects with major delete
+        offsets = [0, 43, 45, 100];
+        patches = share.dmp.patch_make('The quick brown fox jumps over the lazy dog.', 'Woof');
+        patchstr = share.dmp.patch_toText(patches);
+        share.patch_apply_(patches, 'The quick brown fox jumps over the lazy dog.', offsets);
+        assertEquals(patchstr, share.dmp.patch_toText(patches));
+        assertEquivalent([0, 0, 5, 60], offsets);
+
+        // Edge exact match
+        patches = share.dmp.patch_make('', 'test');
+        result = share.patch_apply_(patches, '', offsets);
+        assertEquals('test', result);
+
+        // Near edge exact match
+        patches = share.dmp.patch_make('XY', 'XtestY');
+        result = share.patch_apply_(patches, 'XY', offsets);
+        assertEquals('XtestY', result);
+
+        // Edge partial match
+        patches = share.dmp.patch_make('y', 'y123');
+        result = share.patch_apply_(patches, 'x', offsets);
+        assertEquals('x123', result);
       }
 
 
@@ -386,9 +438,9 @@
 
 
       function runTests() {
-        tests = ['testUniqueId', 'testComputeSyncInterval', 'testSplitBlocks',
+        var tests = ['testUniqueId', 'testComputeSyncInterval', 'testSplitBlocks',
             'testValidNode', 'testShareHandler', 'testNormalizeLinebreaks',
-            'testCursor', 'testMergeType'];
+            'testCursor', 'testPatchApply', 'testMergeType'];
         for (var x = 0; x < tests.length; x++) {
           document.write('<H3>' + tests[x] + ':</H3>');
           eval(tests[x] + '()');
@@ -414,4 +466,3 @@
 
   </body>
 </html>
-

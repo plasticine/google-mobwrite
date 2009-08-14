@@ -393,7 +393,7 @@ mobwrite.shareObj.prototype.syncText = function() {
     data += this.editStack[x][1] + '\n';
   }
   // Opera doesn't know how to encode char 0. (fixed in Opera 9.63)
-  return data.replace(/\0/g, '%00');
+  return data.replace(/\x00/g, '%00');
 };
 
 
@@ -430,7 +430,8 @@ mobwrite.syncRun1_ = function() {
     if (mobwrite.debug) {
       window.console.info('All objects silent; null sync.');
     }
-    return mobwrite.syncRun2_('\n\n');
+    mobwrite.syncRun2_('\n\n');
+    return;
   }
 
   var remote = (mobwrite.syncGateway.indexOf('://') != -1);
@@ -510,7 +511,7 @@ mobwrite.splitBlocks_ = function(data, opt_minBlocks) {
   // Break the data into small blocks.
   var blocks = [];
   // Encode the data again because it is being wrapped into another shell.
-  encEncData = encodeURIComponent(encData);
+  var encEncData = encodeURIComponent(encData);
   // Compute the size of the overhead for each block.
   // Small bug: if there are 10+ blocks, we reserve but don't use one extra
   // byte for blocks 1-9.
@@ -835,7 +836,7 @@ mobwrite.syncLoadAjax_ = function(url, post, callback) {
       try {
         req = new ActiveXObject('Microsoft.XMLHTTP');
       } catch(e3) {
-      	req = null;
+        req = null;
       }
     }
   }
