@@ -19,13 +19,19 @@
 
 <html>
   <head>
-    <TITLE>Test Harness for MobWrite Client</TITLE>
-    <SCRIPT SRC="../diff_match_patch_uncompressed.js"></SCRIPT>
-    <SCRIPT SRC="../mobwrite_core.js"></SCRIPT>
-    <SCRIPT SRC="../mobwrite_form.js"></SCRIPT>
-    <!--
-    <SCRIPT SRC="../compressed_form.js"></SCRIPT>
-    -->
+    <script type="text/javascript">
+      // Depending on the URL argument, test the compressed or uncompressed version.
+      var uncompressed = (document.location.search == '?uncompressed');
+      if (uncompressed) {
+        document.write('<TITLE>Test Harness for MobWrite Client (uncompressed)</TITLE>');
+        document.write('<scr'+'ipt type="text/javascript" src="../diff_match_patch_uncompressed.js"></scr'+'ipt>');
+        document.write('<scr'+'ipt type="text/javascript" src="../mobwrite_core.js"></scr'+'ipt>');
+        document.write('<scr'+'ipt type="text/javascript" src="../mobwrite_form.js"></scr'+'ipt>');
+      } else {
+        document.write('<TITLE>Test Harness for MobWrite Client (compressed)</TITLE>');
+        document.write('<scr'+'ipt type="text/javascript" src="../compressed_form.js"></scr'+'ipt>');
+      }
+    </script>
 
     <script type="text/javascript">
       // Counters for unit test results.
@@ -368,29 +374,49 @@
         var textarea = document.createElement('textarea');
         textarea.id = 'test_textarea';
         var share = new mobwrite.shareTextareaObj(textarea);
+        share.dmp.Match_Distance = 1000;
+        share.dmp.Match_Threshold = 0.5;
+        share.dmp.Patch_DeleteThreshold = 0.5;
 
-        // Exact match
+        // Exact match.
         var patches = share.dmp.patch_make('The quick brown fox jumps over the lazy dog.', 'That quick brown fox jumped over a lazy dog.');
         var offsets = [0, 2, 4, 23, 26, 30, 35, 100];
         var result = share.patch_apply_(patches, 'The quick brown fox jumps over the lazy dog.', offsets);
         assertEquals('That quick brown fox jumped over a lazy dog.', result);
         assertEquivalent([0, 2, 5, 24, 28, 32, 35, 100], offsets);
 
-        // Partial match
+        // Partial match.
         result = share.patch_apply_(patches, 'The quick red rabbit jumps over the tired tiger.', offsets);
         assertEquals('That quick red rabbit jumped over a tired tiger.', result);
 
-        // Failed match
+        // Failed match.
         result = share.patch_apply_(patches, 'I am the very model of a modern major general.', offsets);
         assertEquals('I am the very model of a modern major general.', result);
 
-        // No side effects
+        // Big delete, small change.
+        patches = share.dmp.patch_make('x1234567890123456789012345678901234567890123456789012345678901234567890y', 'xabcy');
+        result = share.patch_apply_(patches, 'x123456789012345678901234567890-----++++++++++-----123456789012345678901234567890y', offsets);
+        assertEquivalent('xabcy', result);
+
+        // Big delete, big change 1.
+        patches = share.dmp.patch_make('x1234567890123456789012345678901234567890123456789012345678901234567890y', 'xabcy');
+        result = share.patch_apply_(patches, 'x12345678901234567890---------------++++++++++---------------12345678901234567890y', offsets);
+        assertEquivalent('xabc12345678901234567890---------------++++++++++---------------12345678901234567890y', result);
+
+        // Big delete, big change 2.
+        share.dmp.Patch_DeleteThreshold = 0.6;
+        patches = share.dmp.patch_make('x1234567890123456789012345678901234567890123456789012345678901234567890y', 'xabcy');
+        result = share.patch_apply_(patches, 'x12345678901234567890---------------++++++++++---------------12345678901234567890y', offsets);
+        assertEquivalent('xabcy', result);
+        share.dmp.Patch_DeleteThreshold = 0.5;
+
+        // No side effects.
         patches = share.dmp.patch_make('', 'test');
         var patchstr = share.dmp.patch_toText(patches);
         share.patch_apply_(patches, '', offsets);
         assertEquals(patchstr, share.dmp.patch_toText(patches));
 
-        // No side effects with major delete
+        // No side effects with major delete.
         offsets = [0, 43, 45, 100];
         patches = share.dmp.patch_make('The quick brown fox jumps over the lazy dog.', 'Woof');
         patchstr = share.dmp.patch_toText(patches);
@@ -398,17 +424,17 @@
         assertEquals(patchstr, share.dmp.patch_toText(patches));
         assertEquivalent([0, 0, 5, 60], offsets);
 
-        // Edge exact match
+        // Edge exact match.
         patches = share.dmp.patch_make('', 'test');
         result = share.patch_apply_(patches, '', offsets);
         assertEquals('test', result);
 
-        // Near edge exact match
+        // Near edge exact match.
         patches = share.dmp.patch_make('XY', 'XtestY');
         result = share.patch_apply_(patches, 'XY', offsets);
         assertEquals('XtestY', result);
 
-        // Edge partial match
+        // Edge partial match.
         patches = share.dmp.patch_make('y', 'y123');
         result = share.patch_apply_(patches, 'x', offsets);
         assertEquals('x123', result);
@@ -450,19 +476,27 @@
     </script>
   </head>
   <body>
-    <H1>Test Harness for MobWrite Client</H1>
+    <script type="text/javascript">
+      if (uncompressed) {
+        document.write('<H1>Test Harness for MobWrite Client (uncompressed)</H1>');
+        document.write('[ Switch to <A HREF="?compressed">Compressed</A>. ]');
+      } else {
+        document.write('<H1>Test Harness for MobWrite Client (compressed)</H1>');
+        document.write('[ Switch to <A HREF="?uncompressed">Uncompressed</A>. ]');
+      }
+    </script>
 
     <P>If debugging errors, start with the first reported error,
     subsequent tests often rely on earlier ones.</P>
 
-    <script type="text/javascript"><!--
+    <script type="text/javascript">
       var start_time = (new Date()).getTime();
       runTests();
       var end_time = (new Date()).getTime();
       document.write('<H3>Done.</H3>');
       document.write('<P>Tests passed: ' + test_good + '<BR>Tests failed: ' + test_bad + '</P>');
       document.write('<P>Total time: ' + (end_time - start_time) + ' ms</P>');
-    //--></script>
+    </script>
 
   </body>
 </html>

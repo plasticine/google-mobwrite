@@ -466,7 +466,25 @@ mobwrite.shareTextareaObj.prototype.patch_apply_ =
   for (var x = 0; x < patches.length; x++) {
     var expected_loc = patches[x].start2 + delta;
     var text1 = this.dmp.diff_text1(patches[x].diffs);
-    var start_loc = this.dmp.match_main(text, text1, expected_loc);
+    var start_loc;
+    var end_loc = -1;
+    if (text1.length > this.dmp.Match_MaxBits) {
+      // patch_splitMax will only provide an oversized pattern in the case of
+      // a monster delete.
+      start_loc = this.dmp.match_main(text,
+          text1.substring(0, this.dmp.Match_MaxBits), expected_loc);
+      if (start_loc != -1) {
+        end_loc = this.dmp.match_main(text,
+            text1.substring(text1.length - this.dmp.Match_MaxBits),
+            expected_loc + text1.length - this.dmp.Match_MaxBits);
+        if (end_loc == -1 || start_loc >= end_loc) {
+          // Can't find valid trailing context.  Drop this patch.
+          start_loc = -1;
+        }
+      }
+    } else {
+      start_loc = this.dmp.match_main(text, text1, expected_loc);
+    }
     if (start_loc == -1) {
       // No match found.  :(
       if (mobwrite.debug) {
@@ -478,41 +496,55 @@ mobwrite.shareTextareaObj.prototype.patch_apply_ =
         window.console.info('Patch OK.');
       }
       delta = start_loc - expected_loc;
-      var text2 = text.substring(start_loc, start_loc + text1.length);
+      var text2;
+      if (end_loc == -1) {
+        text2 = text.substring(start_loc, start_loc + text1.length);
+      } else {
+        text2 = text.substring(start_loc, end_loc + this.dmp.Match_MaxBits);
+      }
       // Run a diff to get a framework of equivalent indices.
       var diffs = this.dmp.diff_main(text1, text2, false);
-      var index1 = 0;
-      var index2;
-      for (var y = 0; y < patches[x].diffs.length; y++) {
-        var mod = patches[x].diffs[y];
-        if (mod[0] !== DIFF_EQUAL) {
-          index2 = this.dmp.diff_xIndex(diffs, index1);
+      if (text1.length > this.dmp.Match_MaxBits &&
+          this.dmp.diff_levenshtein(diffs) / text1.length >
+          this.dmp.Patch_DeleteThreshold) {
+        // The end points match, but the content is unacceptably bad.
+        if (mobwrite.debug) {
+          window.console.warn('Patch contents mismatch: ' + patches[x]);
         }
-        if (mod[0] === DIFF_INSERT) {  // Insertion
-          text = text.substring(0, start_loc + index2) + mod[1] +
-                 text.substring(start_loc + index2);
-          for (var i = 0; i < offsets.length; i++) {
-            if (offsets[i] + nullPadding.length > start_loc + index2) {
-              offsets[i] += mod[1].length;
-            }
+      } else {
+        var index1 = 0;
+        var index2;
+        for (var y = 0; y < patches[x].diffs.length; y++) {
+          var mod = patches[x].diffs[y];
+          if (mod[0] !== DIFF_EQUAL) {
+            index2 = this.dmp.diff_xIndex(diffs, index1);
           }
-        } else if (mod[0] === DIFF_DELETE) {  // Deletion
-          var del_start = start_loc + index2;
-          var del_end = start_loc + this.dmp.diff_xIndex(diffs,
-              index1 + mod[1].length);
-          text = text.substring(0, del_start) + text.substring(del_end);
-          for (var i = 0; i < offsets.length; i++) {
-            if (offsets[i] + nullPadding.length > del_start) {
-              if (offsets[i] + nullPadding.length < del_end) {
-                offsets[i] = del_start - nullPadding.length;
-              } else {
-                offsets[i] -= del_end - del_start;
+          if (mod[0] === DIFF_INSERT) {  // Insertion
+            text = text.substring(0, start_loc + index2) + mod[1] +
+                   text.substring(start_loc + index2);
+            for (var i = 0; i < offsets.length; i++) {
+              if (offsets[i] + nullPadding.length > start_loc + index2) {
+                offsets[i] += mod[1].length;
+              }
+            }
+          } else if (mod[0] === DIFF_DELETE) {  // Deletion
+            var del_start = start_loc + index2;
+            var del_end = start_loc + this.dmp.diff_xIndex(diffs,
+                index1 + mod[1].length);
+            text = text.substring(0, del_start) + text.substring(del_end);
+            for (var i = 0; i < offsets.length; i++) {
+              if (offsets[i] + nullPadding.length > del_start) {
+                if (offsets[i] + nullPadding.length < del_end) {
+                  offsets[i] = del_start - nullPadding.length;
+                } else {
+                  offsets[i] -= del_end - del_start;
+                }
               }
             }
           }
-        }
-        if (mod[0] !== DIFF_DELETE) {
-          index1 += mod[1].length;
+          if (mod[0] !== DIFF_DELETE) {
+            index1 += mod[1].length;
+          }
         }
       }
     }
