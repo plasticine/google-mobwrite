@@ -4,12 +4,16 @@
 </HEAD>
 <BODY>
 
-<APPLET code="name.fraser.neil.mobwrite.DemoFormApplet" width="350" height="400" archive="mobwrite_form.jar">
+<APPLET code="name.fraser.neil.mobwrite.DemoFormApplet" width="350" height="400" archive="mobwrite-demo.jar">
   <!-- Note that the same origin policy may prevent the gateway being on a remote computer. -->
   <PARAM NAME="syncGateway" VALUE="http://mobwrite3.appspot.com/scripts/q.py">
   <PARAM NAME="maxSyncInterval" VALUE="10000">
   <PARAM NAME="minSyncInterval" VALUE="1000">
 </APPLET>
+
+
+<P><SMALL>Note that due to Java's same-origin policy, this applet will only sync if the gateway
+(specified in the HTML source of this page) matches the host serving this page.</SMALL></P>
 
 </BODY>
 </HTML>
