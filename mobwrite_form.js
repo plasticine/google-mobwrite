@@ -68,7 +68,7 @@ mobwrite.shareHandlers.push(mobwrite.shareHandlerForm);
 
 /**
  * Constructor of shared object representing a hidden input.
- * @param {Node} node A hidden element
+ * @param {Node} node A hidden element.
  * @constructor
  */
 mobwrite.shareHiddenObj = function(node) {
@@ -98,7 +98,7 @@ mobwrite.shareHiddenObj.prototype.getClientText = function() {
 
 /**
  * Set the user's content.
- * @param {string} text New content
+ * @param {string} text New content.
  */
 mobwrite.shareHiddenObj.prototype.setClientText = function(text) {
   this.element.value = text;
@@ -108,7 +108,7 @@ mobwrite.shareHiddenObj.prototype.setClientText = function(text) {
 /**
  * Handler to accept hidden fields as elements that can be shared.
  * If the element is a hidden field, create a new sharing object.
- * @param {*} node Object or ID of object to share
+ * @param {*} node Object or ID of object to share.
  * @return {Object?} A sharing object or null.
  */
 mobwrite.shareHiddenObj.shareHandler = function(node) {
@@ -131,7 +131,7 @@ mobwrite.shareHandlers.push(mobwrite.shareHiddenObj.shareHandler);
 
 /**
  * Constructor of shared object representing a checkbox.
- * @param {Node} node A checkbox element
+ * @param {Node} node A checkbox element.
  * @constructor
  */
 mobwrite.shareCheckboxObj = function(node) {
@@ -160,7 +160,7 @@ mobwrite.shareCheckboxObj.prototype.getClientText = function() {
 
 /**
  * Set the user's check.
- * @param {string} text New content
+ * @param {string} text New content.
  */
 mobwrite.shareCheckboxObj.prototype.setClientText = function(text) {
   // Safari has a blank value if not set, all other browsers have 'on'.
@@ -173,7 +173,7 @@ mobwrite.shareCheckboxObj.prototype.setClientText = function(text) {
 /**
  * Handler to accept checkboxen as elements that can be shared.
  * If the element is a checkbox, create a new sharing object.
- * @param {*} node Object or ID of object to share
+ * @param {*} node Object or ID of object to share.
  * @return {Object?} A sharing object or null.
  */
 mobwrite.shareCheckboxObj.shareHandler = function(node) {
@@ -196,7 +196,7 @@ mobwrite.shareHandlers.push(mobwrite.shareCheckboxObj.shareHandler);
 
 /**
  * Constructor of shared object representing a select box.
- * @param {Node} node A select box element
+ * @param {Node} node A select box element.
  * @constructor
  */
 mobwrite.shareSelectObj = function(node) {
@@ -233,7 +233,7 @@ mobwrite.shareSelectObj.prototype.getClientText = function() {
 
 /**
  * Set the user's selection(s).
- * @param {string} text New content
+ * @param {string} text New content.
  */
 mobwrite.shareSelectObj.prototype.setClientText = function(text) {
   text = '\0' + text + '\0';
@@ -270,7 +270,7 @@ mobwrite.shareHandlers.push(mobwrite.shareSelectObj.shareHandler);
 
 /**
  * Constructor of shared object representing a radio button.
- * @param {Node} node A radio button element
+ * @param {Node} node A radio button element.
  * @constructor
  */
 mobwrite.shareRadioObj = function(node) {
@@ -309,7 +309,7 @@ mobwrite.shareRadioObj.prototype.getClientText = function() {
 
 /**
  * Set the user's check.
- * @param {string} text New content
+ * @param {string} text New content.
  */
 mobwrite.shareRadioObj.prototype.setClientText = function(text) {
   for (var x = 0; x < this.elements.length; x++) {
@@ -322,7 +322,7 @@ mobwrite.shareRadioObj.prototype.setClientText = function(text) {
 /**
  * Handler to accept radio buttons as elements that can be shared.
  * If the element is a radio button, create a new sharing object.
- * @param {*} node Object or ID of object to share
+ * @param {*} node Object or ID of object to share.
  * @return {Object?} A sharing object or null.
  */
 mobwrite.shareRadioObj.shareHandler = function(node) {
@@ -353,7 +353,7 @@ mobwrite.shareHandlers.push(mobwrite.shareRadioObj.shareHandler);
 
 /**
  * Constructor of shared object representing a text field.
- * @param {Node} node A textarea, text or password input
+ * @param {Node} node A textarea, text or password input.
  * @constructor
  */
 mobwrite.shareTextareaObj = function(node) {
@@ -400,7 +400,7 @@ mobwrite.shareTextareaObj.prototype.setClientText = function(text) {
 
 /**
  * Modify the user's plaintext by applying a series of patches against it.
- * @param {Array.<patch_obj>} patches Array of Patch objects
+ * @param {Array.<patch_obj>} patches Array of Patch objects.
  */
 mobwrite.shareTextareaObj.prototype.patchClientText = function(patches) {
   // Set some constants which tweak the matching behaviour.
@@ -752,7 +752,7 @@ mobwrite.shareTextareaObj.normalizeLinebreaks_ = function(text) {
  * Handler to accept text fields as elements that can be shared.
  * If the element is a textarea, text or password input, create a new
  * sharing object.
- * @param {*} node Object or ID of object to share
+ * @param {*} node Object or ID of object to share.
  * @return {Object?} A sharing object or null.
  */
 mobwrite.shareTextareaObj.shareHandler = function(node) {

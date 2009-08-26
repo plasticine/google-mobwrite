@@ -274,7 +274,7 @@ mobwrite.shareObj.prototype.mergeChanges = true;
 
 
 /**
- * Fetch or compute a plaintext representation of the user's text
+ * Fetch or compute a plaintext representation of the user's text.
  * @return {string} Plaintext content.
  */
 mobwrite.shareObj.prototype.getClientText = function() {
@@ -335,7 +335,7 @@ mobwrite.shareObj.prototype.fireChange = function(target) {
 
 /**
  * Return the command to nullify this field.  Also unshares this field.
- * @return {string} Commands to be sent to the server.
+ * @return {string} Command to be sent to the server.
  */
 mobwrite.shareObj.prototype.nullify = function() {
   mobwrite.unshare(this.file);
