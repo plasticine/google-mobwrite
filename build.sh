@@ -35,7 +35,7 @@ cp lib/mobwrite_core.py lib/diff_match_patch.py mobwrite/lib/
 mkdir mobwrite/static
 cp mobwrite_core.js mobwrite_form.js diff_match_patch_uncompressed.js compressed_form.js mobwrite/static/
 mkdir mobwrite/static/demos
-cp demos/index.html demos/editor.html demos/form.html demos/spreadsheet.html demos/java-editor.html demos/java-form.html demos/mobwrite-demo.jar mobwrite/static/demos/
+cp demos/index.html demos/editor.html demos/form.html demos/spreadsheet.html demos/java-editor.html demos/java-form.html demos/mobwrite-demo.jar demos/codeeditor.html mobwrite/static/demos/
 mkdir mobwrite/static/remote-demos
 cp remote-demos/index.html remote-demos/editor.html remote-demos/form.html remote-demos/spreadsheet.html mobwrite/static/remote-demos/
 mkdir mobwrite/static/tests

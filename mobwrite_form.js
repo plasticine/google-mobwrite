@@ -490,6 +490,8 @@ mobwrite.shareTextareaObj.prototype.patch_apply_ =
       if (mobwrite.debug) {
         window.console.warn('Patch failed: ' + patches[x]);
       }
+      // Subtract the delta for this failed patch from subsequent patches.
+      delta -= patches[x].length2 - patches[x].length1;
     } else {
       // Found a match.  :)
       if (mobwrite.debug) {
