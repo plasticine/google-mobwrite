@@ -125,6 +125,8 @@ class ShareJTextComponent extends ShareObj {
         }
         if (start_loc == -1) {
           // No match found.  :(
+          // Subtract the delta for this failed patch from subsequent patches.
+          delta -= aPatch.length2 - aPatch.length1;
         } else {
           // Found a match.  :)
           delta = start_loc - expected_loc;
