@@ -27,6 +27,7 @@ __author__ = "fraser@google.com (Neil Fraser)"
 
 import cgi
 import datetime
+import os
 import sys
 import urllib
 
@@ -485,6 +486,13 @@ def main():
     print "Content-Type: text/plain"
     print ""
     mobwrite.cleanup()
+  elif os.environ["QUERY_STRING"]:
+    # Display a minimal editor.
+    print "Content-Type: text/html"
+    print ""
+    f = open("default_editor.html")
+    print f.read()
+    f.close
   else:
     # Unknown request.
     print "Content-Type: text/plain"

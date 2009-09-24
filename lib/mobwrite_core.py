@@ -33,7 +33,7 @@ DMP.Diff_Timeout = 0.1
 
 # Demo usage should limit the maximum size of any text.
 # Set to 0 to disable limit.
-MAX_CHARS = 20000
+MAX_CHARS = 100000
 
 # Delete any view which hasn't been accessed in half an hour.
 TIMEOUT_VIEW = datetime.timedelta(minutes=30)

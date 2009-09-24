@@ -27,29 +27,42 @@ Works either as a CGI script or as a mod_python script.
 __author__ = "fraser@google.com (Neil Fraser)"
 
 import socket
+import os
 
 PORT = 3017
+DEFAULT_EDITOR = "/home/mobwrite/default_editor.html"
 
 def handler(req):
   if req == None:
     # CGI call
-    print 'Content-type: text/plain\n'
+    if os.environ["QUERY_STRING"]:
+      print "Content-Type: text/html"
+      print ""
+      printEditor()
+      return
+
+    print "Content-type: text/plain\n"
     form = cgi.FieldStorage()
   else:
     # mod_python call
-    req.content_type = 'text/plain'
+    if req.args:
+      req.content_type = "text/html"
+      printEditor()
+      return apache.OK
+
+    req.content_type = "text/plain"
     # Publisher mode provides req.form, regular mode does not.
     form = getattr(req, "form", util.FieldStorage(req))
 
-  outStr = '\n'
-  if form.has_key('q'):
+  outStr = "\n"
+  if form.has_key("q"):
     # Client sending a sync.  Requesting text return.
-    outStr = form['q'].value
-  elif form.has_key('p'):
+    outStr = form["q"].value
+  elif form.has_key("p"):
     # Client sending a sync.  Requesting JS return.
-    outStr = form['p'].value
+    outStr = form["p"].value
 
-  inStr = ''
+  inStr = ""
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   try:
     s.connect(("localhost", PORT))
@@ -57,7 +70,7 @@ def handler(req):
     s = None
   if not s:
     # Python CGI can't connect to Python daemon.
-    inStr = '\n'
+    inStr = "\n"
   else:
     # Timeout if MobWrite daemon dosen't respond in 10 seconds.
     s.settimeout(10.0)
@@ -69,7 +82,7 @@ def handler(req):
       inStr += line
     s.close()
 
-  if form.has_key('p'):
+  if form.has_key("p"):
     # Client sending a sync.  Requesting JS return.
     inStr = inStr.replace("\\", "\\\\").replace("\"", "\\\"")
     inStr = inStr.replace("\n", "\\n").replace("\r", "\\r")
@@ -90,6 +103,16 @@ def handler(req):
     return apache.OK
 
 
+def printEditor():
+  try:
+    f = open(DEFAULT_EDITOR)
+  except:
+    print "Unable to open " + DEFAULT_EDITOR
+    return
+  print f.read()
+  close(f)
+
+
 if __name__ == "__main__":
   # CGI call
   import cgi
@@ -98,4 +121,3 @@ else:
   # mod_python call
   from mod_python import apache
   from mod_python import util
-
