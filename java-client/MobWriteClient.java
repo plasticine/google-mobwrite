@@ -40,7 +40,7 @@ import name.fraser.neil.plaintext.diff_match_patch.*;
 /**
  * Class representing a MobWrite client.
  */
-public class MobWriteClient extends Thread {
+public class MobWriteClient {
   /**
    * URL of web gateway.
    */
@@ -73,6 +73,11 @@ public class MobWriteClient extends Thread {
   public String idPrefix = "";
 
   /**
+   * Is there a cookie required to access the server.
+   */
+  public String cookie = null;
+
+  /**
    * Track whether something changed client-side in each sync.
    */
   protected boolean clientChange_ = false;
@@ -80,7 +85,7 @@ public class MobWriteClient extends Thread {
   /**
    * Track whether something changed server-side in each sync.
    */
-  private boolean serverChange_ = false;
+  protected boolean serverChange_ = false;
 
   /**
    * Flag to nullify all shared elements and terminate.
@@ -101,25 +106,29 @@ public class MobWriteClient extends Thread {
    * Logging object.
    */
   protected Logger logger;
-  
-  
+
+  /**
+   * Currently running synchronization thread.
+   */
+  private Thread syncThread = null;
+
   /**
    * Constructor.  Initializes a MobWrite client.
    */
   public MobWriteClient() {
     this.logger = Logger.getLogger("MobWrite");
-    this.syncUsername = this.uniqueId();
+    this.syncUsername = MobWriteClient.uniqueId();
     logger.log(Level.INFO, "Username: " + this.syncUsername);
     this.shared = new HashMap<String, ShareObj>();
   }
 
-  
+
   /**
    * Return a random id that's 8 letters long.
    * 26*(26+10+4)^7 = 4,259,840,000,000
    * @return Random id.
    */
-  private String uniqueId() {
+  public static String uniqueId() {
     // First character must be a letter.
     // IE is case insensitive (in violation of the W3 spec).
     String soup = "abcdefghijklmnopqrstuvwxyz";
@@ -133,14 +142,14 @@ public class MobWriteClient extends Thread {
     String id = sb.toString();
     // Don't allow IDs with '--' in them since it might close a comment.
     if (id.indexOf("--") != -1) {
-      id = this.uniqueId();
+      id = uniqueId();
     }
     return id;
     // Getting the maximum possible density in the ID is worth the extra code,
     // since the ID is transmitted to the server a lot.
   }
 
-  
+
   /**
    * Collect all client-side changes and send them to the server.
    */
@@ -177,18 +186,21 @@ public class MobWriteClient extends Thread {
     // Issue Ajax post of client-side changes and request server-side changes.
     StringBuffer buffer = new StringBuffer();
     try {
-      // Construct data
+      // Construct data.
       String q = "q=" + URLEncoder.encode(data.toString(), "UTF-8");
-      // Send data
+      // Send data.
       URL url = new URL(this.syncGateway);
       URLConnection conn = url.openConnection();
+      if (this.cookie != null) {
+        conn.setRequestProperty("Cookie", this.cookie);
+      }
       conn.setConnectTimeout(this.timeoutInterval);
       conn.setReadTimeout(this.timeoutInterval);
       conn.setDoOutput(true);
       OutputStreamWriter wr = new OutputStreamWriter(conn.getOutputStream());
       wr.write(q);
       wr.flush();
-  
+
       // Get the response
       BufferedReader rd = new BufferedReader(new InputStreamReader(conn.getInputStream()));
       String line;
@@ -204,7 +216,7 @@ public class MobWriteClient extends Thread {
     // Execution will resume in either syncCheckAjax_(), or syncKill_()
   }
 
-  
+
   /**
    * Parse all server-side changes and distribute them to the shared objects.
    */
@@ -384,9 +396,9 @@ public class MobWriteClient extends Thread {
         }
       }
     }
-  }  
+  }
 
-  
+
   /**
    * Compute how long to wait until next synchronization.
    */
@@ -414,7 +426,7 @@ public class MobWriteClient extends Thread {
         Math.min(this.maxSyncInterval, this.syncInterval);
   }
 
-  
+
   /**
    * Start sharing the specified object(s).
    */
@@ -426,14 +438,17 @@ public class MobWriteClient extends Thread {
       this.logger.log(Level.INFO, "Sharing shareObj: \"" + shareObj.file + "\"");
     }
 
-    try {
-      this.start();
-    } catch (IllegalThreadStateException e) {
-      // Thread already started.
+    if (this.syncThread == null || !this.syncThread.isAlive()) {
+      this.syncThread = new SyncThread(this);
+      try {
+        this.syncThread.start();
+      } catch (IllegalThreadStateException e) {
+        // Thread already started.
+      }
     }
   }
 
-  
+
   /**
    * Stop sharing the specified object(s).
    */
@@ -443,12 +458,13 @@ public class MobWriteClient extends Thread {
       if (shareObj == null) {
         this.logger.log(Level.INFO, "Ignoring \"" + shareObjs[i].file + "\". Not currently shared.");
       } else {
+        shareObj.mobwrite = null;
         this.logger.log(Level.INFO, "Unshared: \"" + shareObj.file + "\"");
       }
     }
   }
-  
-  
+
+
   /**
    * Stop sharing the specified file ID(s).
    */
@@ -458,29 +474,12 @@ public class MobWriteClient extends Thread {
       if (shareObj == null) {
         this.logger.log(Level.INFO, "Ignoring \"" + shareFiles[i] + "\". Not currently shared.");
       } else {
+        shareObj.mobwrite = null;
         this.logger.log(Level.INFO, "Unshared: \"" + shareObj.file + "\"");
       }
     }
   }
-  
 
-  /**
-   * Main execution loop for MobWrite syncronization.
-   */
-  public void run() {
-    while(!this.shared.isEmpty()) {
-      this.syncRun1_();
- 
-      this.computeSyncInterval_();
-
-      try {
-        Thread.sleep(this.syncInterval);
-      } catch (InterruptedException e) {
-        return;
-      }
-    }
-    this.logger.log(Level.INFO, "MobWrite task stopped.");
-  }
 
   /**
    * Unescape selected chars for compatibility with JavaScript's encodeURI.
@@ -489,9 +488,9 @@ public class MobWriteClient extends Thread {
    * Note that this function is case-sensitive.  Thus "%3f" would not be
    * unescaped.  But this is ok because it is only called with the output of
    * URLEncoder.encode which returns uppercase hex.
-   * 
+   *
    * Example: "%3F" -> "?", "%24" -> "$", etc.
-   * 
+   *
    * @param str The string to escape.
    * @return The escaped string.
    */
@@ -504,5 +503,34 @@ public class MobWriteClient extends Thread {
         .replace("%2C", ",").replace("%23", "#");
   }
 
-}
+  private class SyncThread extends Thread {
 
+    private MobWriteClient client;
+
+    public SyncThread(MobWriteClient client) {
+      super();
+      this.client = client;
+    }
+
+    /**
+     * Main execution loop for MobWrite synchronization.
+     */
+    public void run() {
+      while(!this.client.shared.isEmpty()) {
+        this.client.syncRun1_();
+
+        this.client.computeSyncInterval_();
+
+        try {
+          Thread.sleep(this.client.syncInterval);
+        } catch (InterruptedException e) {
+          return;
+        }
+      }
+      this.client.logger.log(Level.INFO, "MobWrite task stopped.");
+    }
+
+
+  }
+
+}

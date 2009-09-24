@@ -48,7 +48,7 @@ public class DemoEditorApplet extends JApplet {
       e.printStackTrace();
     }
   }
-  
+
   private void createGUI() {
     SpringLayout springLayout = new SpringLayout();
     getContentPane().setLayout(springLayout);
@@ -78,4 +78,4 @@ public class DemoEditorApplet extends JApplet {
     demo_editor_text.setWrapStyleWord(true);
     scrollPane.setViewportView(demo_editor_text);
   }
-} 
+}

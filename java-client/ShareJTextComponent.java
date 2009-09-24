@@ -81,7 +81,7 @@ class ShareJTextComponent extends ShareObj {
       return;
     }
     int Match_MaxBits = 32;
-    
+
     // Deep copy the patches so that no changes are made to originals.
     patches = dmp.patch_deepCopy(patches);
 
@@ -90,11 +90,11 @@ class ShareJTextComponent extends ShareObj {
     try {
       String text = this.getClientText();
       Document doc = this.textComponent.getDocument();
-      
+
       String nullPadding = dmp.patch_addPadding(patches);
       text = nullPadding + text + nullPadding;
       dmp.patch_splitMax(patches);
-  
+
       int x = 0;
       // delta keeps track of the offset between the expected and actual location
       // of the previous patch.  If there are patches expected at positions 10 and
@@ -200,7 +200,7 @@ class ShareJTextComponent extends ShareObj {
       text = text.substring(nullPadding.length(), text.length()
           - nullPadding.length());
     } finally {
-      this.textComponent.setEditable(true);      
+      this.textComponent.setEditable(true);
     }
   }
   // TODO: Fire synthetic change events.

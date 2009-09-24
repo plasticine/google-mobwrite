@@ -14,16 +14,24 @@ public abstract class ShareObj {
    * http://code.google.com/p/google-diff-match-patch/
    */
   protected diff_match_patch dmp;
-  
+
   /**
    * The filename or ID for this shared object.
    */
   protected String file;
-  
+
+  public String getFile() {
+    return file;
+  }
+
   /**
    * The hosting MobWriteClient.
    */
   protected MobWriteClient mobwrite;
+
+  public MobWriteClient getMobwrite() {
+    return mobwrite;
+  }
 
   /**
    * List of currently unacknowledged edits sent to the server.
@@ -69,7 +77,7 @@ public abstract class ShareObj {
     // List of unacknowledged edits sent to the server.
     this.editStack = new LinkedList<Object[]>();
   }
-  
+
   /**
    * Fetch or compute a plaintext representation of the user's text.
    * @return Plaintext content.
@@ -81,7 +89,7 @@ public abstract class ShareObj {
    * @param text New text.
    */
   public abstract void setClientText(String text);
-  
+
   /**
    * Modify the user's plaintext by applying a series of patches against it.
    * @param patches Array of Patch objects.
@@ -132,7 +140,7 @@ public abstract class ShareObj {
     }
     return "N:" + data + '\n';
   }
-  
+
   /**
    * Asks the ShareObj to synchronize.  Computes client-made changes since
    * previous postback.  Return '' to skip this synchronization.
@@ -215,5 +223,14 @@ public abstract class ShareObj {
       data += (String) pair[1] + '\n';
     }
     return data;
+  }
+
+  /**
+   * Stop sharing this object.
+   */
+  public void unshare() {
+    if (this.mobwrite != null) {
+      this.mobwrite.unshare(this);
+    }
   }
 }

@@ -74,7 +74,7 @@ public class DemoFormApplet extends JApplet implements ActionListener {
       e.printStackTrace();
     }
   }
-  
+
   /**
    * Lay out the GUI and initialize the form elements.
    */
@@ -208,4 +208,4 @@ public class DemoFormApplet extends JApplet implements ActionListener {
       demo_form_all_day.setLocation(allDay ? 148 : 229, demo_form_all_day.getLocation().y);
     }
   }
-}  
+}
