@@ -111,31 +111,34 @@ class TextObj(mobwrite_core.TextObj):
     terminate = False
     # Lock must be acquired to prevent simultaneous deletions.
     self.lock.acquire()
-    if STORAGE_MODE == MEMORY:
-      if self.lasttime < datetime.datetime.now() - mobwrite_core.TIMEOUT_TEXT:
-        mobwrite_core.LOG.info("Expired text: '%s'" % self.name)
+    try:
+      if STORAGE_MODE == MEMORY:
+        if self.lasttime < datetime.datetime.now() - mobwrite_core.TIMEOUT_TEXT:
+          mobwrite_core.LOG.info("Expired text: '%s'" % self.name)
+          terminate = True
+      else:
+        # Delete myself from memory if there are no attached views.
+        mobwrite_core.LOG.info("Unloading text: '%s'" % self.name)
         terminate = True
-    else:
-      # Delete myself from memory if there are no attached views.
-      mobwrite_core.LOG.info("Unloading text: '%s'" % self.name)
-      terminate = True
 
-    if terminate:
-      # Save to disk/database.
-      self.save()
-      # Terminate in-memory copy.
-      global texts
-      lock_texts.acquire()
-      try:
-        del texts[self.name]
-      except KeyError:
-        mobwrite_core.LOG.error("Text object not in text list: '%s'" % self.name)
-      lock_texts.release()
-    else:
-      if self.changed:
+      if terminate:
+        # Save to disk/database.
         self.save()
+        # Terminate in-memory copy.
+        global texts
+        lock_texts.acquire()
+        try:
+          del texts[self.name]
+        except KeyError:
+          mobwrite_core.LOG.error("Text object not in text list: '%s'" %
+                                    self.name)
+        finally:
+          lock_texts.release()
+      else:
+        if self.changed:
+          self.save()
+    finally:
       self.lock.release()
-
 
   def load(self):
     # Load the text object from non-volatile storage.
@@ -212,14 +215,16 @@ def fetch_textobj(name, view):
   # Don't let two simultaneous creations happen, or a deletion during a
   # retrieval.
   lock_texts.acquire()
-  if texts.has_key(name):
-    textobj = texts[name]
-    mobwrite_core.LOG.debug("Accepted text: '%s'" % name)
-  else:
-    textobj = TextObj(name=name)
-    mobwrite_core.LOG.debug("Creating text: '%s'" % name)
-  textobj.views += 1
-  lock_texts.release()
+  try:
+    if texts.has_key(name):
+      textobj = texts[name]
+      mobwrite_core.LOG.debug("Accepted text: '%s'" % name)
+    else:
+      textobj = TextObj(name=name)
+      mobwrite_core.LOG.debug("Creating text: '%s'" % name)
+    textobj.views += 1
+  finally:
+    lock_texts.release()
   return textobj
 
 
@@ -235,7 +240,6 @@ class ViewObj(mobwrite_core.ViewObj):
   # Object properties:
   # .edit_stack - List of unacknowledged edits sent to the client.
   # .lasttime - The last time that a web connection serviced this object.
-  # .lock - Access control for writing to the text on this object.
   # .textobj - The shared text object being worked on.
 
   # Inerhited properties:
@@ -253,7 +257,6 @@ class ViewObj(mobwrite_core.ViewObj):
     mobwrite_core.ViewObj.__init__(self, *args, **kwargs)
     self.edit_stack = []
     self.lasttime = datetime.datetime.now()
-    self.lock = thread.allocate_lock()
     self.textobj = fetch_textobj(self.filename, self)
 
     # lock_views must be acquired by the caller to prevent simultaneous
@@ -267,15 +270,19 @@ class ViewObj(mobwrite_core.ViewObj):
     # Delete myself if I've been idle too long.
     # Don't delete during a retrieval.
     lock_views.acquire()
-    if self.lasttime < datetime.datetime.now() - mobwrite_core.TIMEOUT_VIEW:
-      mobwrite_core.LOG.info("Idle out: '%s@%s'" % (self.username, self.filename))
-      global views
-      try:
-        del views[(self.username, self.filename)]
-      except KeyError:
-        mobwrite_core.LOG.error("View object not in view list: '%s %s'" % (self.username, self.filename))
-      self.textobj.views -= 1
-    lock_views.release()
+    try:
+      if self.lasttime < datetime.datetime.now() - mobwrite_core.TIMEOUT_VIEW:
+        mobwrite_core.LOG.info("Idle out: '%s@%s'" %
+                               (self.username, self.filename))
+        global views
+        try:
+          del views[(self.username, self.filename)]
+        except KeyError:
+          mobwrite_core.LOG.error("View object not in view list: '%s %s'" %
+                                  (self.username, self.filename))
+        self.textobj.views -= 1
+    finally:
+      lock_views.release()
 
   def nullify(self):
     self.lasttime = datetime.datetime.min
@@ -287,19 +294,21 @@ def fetch_viewobj(username, filename):
   # Don't let two simultaneous creations happen, or a deletion during a
   # retrieval.
   lock_views.acquire()
-  key = (username, filename)
-  if views.has_key(key):
-    viewobj = views[key]
-    viewobj.lasttime = datetime.datetime.now()
-    mobwrite_core.LOG.debug("Accepting view: '%s@%s'" % key)
-  else:
-    if MAX_VIEWS != 0 and len(views) > MAX_VIEWS:
-      viewobj = None
-      mobwrite_core.LOG.critical("Overflow: Can't create new view.")
+  try:
+    key = (username, filename)
+    if views.has_key(key):
+      viewobj = views[key]
+      viewobj.lasttime = datetime.datetime.now()
+      mobwrite_core.LOG.debug("Accepting view: '%s@%s'" % key)
     else:
-      viewobj = ViewObj(username=username, filename=filename)
-      mobwrite_core.LOG.debug("Creating view: '%s@%s'" % key)
-  lock_views.release()
+      if MAX_VIEWS != 0 and len(views) > MAX_VIEWS:
+        viewobj = None
+        mobwrite_core.LOG.critical("Overflow: Can't create new view.")
+      else:
+        viewobj = ViewObj(username=username, filename=filename)
+        mobwrite_core.LOG.debug("Creating view: '%s@%s'" % key)
+  finally:
+    lock_views.release()
   return viewobj
 
 
@@ -366,11 +375,13 @@ class BufferObj:
     # Delete myself if I've been idle too long.
     # Don't delete during a retrieval.
     lock_buffers.acquire()
-    if self.lasttime < datetime.datetime.now() - mobwrite_core.TIMEOUT_BUFFER:
-      mobwrite_core.LOG.info("Expired buffer: '%s'" % self.name)
-      global buffers
-      del buffers[self.name]
-    lock_buffers.release()
+    try:
+      if self.lasttime < datetime.datetime.now() - mobwrite_core.TIMEOUT_BUFFER:
+        mobwrite_core.LOG.info("Expired buffer: '%s'" % self.name)
+        global buffers
+        del buffers[self.name]
+    finally:
+      lock_buffers.release()
 
 
 class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
@@ -403,19 +414,23 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
       # Don't let two simultaneous creations happen, or a deletion during a
       # retrieval.
       lock_buffers.acquire()
-      if buffers.has_key(name):
-        bufferobj = buffers[name]
-        bufferobj.lasttime = datetime.datetime.now()
-        mobwrite_core.LOG.debug("Found buffer: '%s'" % name)
-      else:
-        bufferobj = BufferObj(name, size)
-        mobwrite_core.LOG.debug("Creating buffer: '%s'" % name)
+      try:
+        if buffers.has_key(name):
+          bufferobj = buffers[name]
+          bufferobj.lasttime = datetime.datetime.now()
+          mobwrite_core.LOG.debug("Found buffer: '%s'" % name)
+        else:
+          bufferobj = BufferObj(name, size)
+          mobwrite_core.LOG.debug("Creating buffer: '%s'" % name)
+      finally:
+        lock_buffers.release()
       bufferobj.lock.acquire()
-      lock_buffers.release()
-      bufferobj.set(index, datum)
-      # Check if Buffer is complete.
-      text = bufferobj.get()
-      bufferobj.lock.release()
+      try:
+        bufferobj.set(index, datum)
+        # Check if Buffer is complete.
+        text = bufferobj.get()
+      finally:
+        bufferobj.lock.release()
       if text is None:
         text = ""
     return urllib.unquote(text)
@@ -469,7 +484,6 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
           # Send back nothing.  Pretend the return packet was lost.
           return ""
         delta_ok = True
-        viewobj.lock.acquire()
         textobj = viewobj.textobj
 
       if action["mode"] == "null":
@@ -477,10 +491,11 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
         mobwrite_core.LOG.debug("Nullifying: '%s@%s'" %
             (viewobj.username, viewobj.filename))
         textobj.lock.acquire()
-        textobj.setText(None)
-        textobj.lock.release()
+        try:
+          textobj.setText(None)
+        finally:
+          textobj.lock.release()
         viewobj.nullify();
-        viewobj.lock.release()
         viewobj = None
         continue
 
@@ -518,11 +533,13 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
         if action["force"] or textobj.text is None:
           # Clobber the server's text.
           textobj.lock.acquire()
-          if textobj.text != data:
-            textobj.setText(data)
-            mobwrite_core.LOG.debug("Overwrote content: '%s@%s'" %
-                (viewobj.username, viewobj.filename))
-          textobj.lock.release()
+          try:
+            if textobj.text != data:
+              textobj.setText(data)
+              mobwrite_core.LOG.debug("Overwrote content: '%s@%s'" %
+                  (viewobj.username, viewobj.filename))
+          finally:
+            textobj.lock.release()
 
       elif action["mode"] == "delta":
         # It's a delta.
@@ -556,8 +573,10 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
           if diffs != None:
             # Textobj lock required for read/patch/write cycle.
             textobj.lock.acquire()
-            self.applyPatches(viewobj, diffs, action)
-            textobj.lock.release()
+            try:
+              self.applyPatches(viewobj, diffs, action)
+            finally:
+              textobj.lock.release()
 
       # Generate output if this is the last action or the username/filename
       # will change in the next iteration.
@@ -571,7 +590,6 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
         last_username = viewobj.username
         last_filename = viewobj.filename
         # Dereference the view object so that a new one can be created.
-        viewobj.lock.release()
         viewobj = None
 
     return "".join(output)
