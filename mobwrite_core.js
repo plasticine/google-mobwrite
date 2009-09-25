@@ -339,7 +339,7 @@ mobwrite.shareObj.prototype.fireChange = function(target) {
  */
 mobwrite.shareObj.prototype.nullify = function() {
   mobwrite.unshare(this.file);
-  return 'N:' + encodeURI(mobwrite.idPrefix + this.file) + '\n';
+  return 'N:' + mobwrite.idPrefix + this.file + '\n';
 };
 
 
@@ -388,7 +388,7 @@ mobwrite.shareObj.prototype.syncText = function() {
 
   // Create the output starting with the file statement, followed by the edits.
   var data = 'F:' + this.serverVersion + ':' +
-      encodeURI(mobwrite.idPrefix + this.file) + '\n';
+      mobwrite.idPrefix + this.file + '\n';
   for (var x = 0; x < this.editStack.length; x++) {
     data += this.editStack[x][1] + '\n';
   }
@@ -916,6 +916,12 @@ mobwrite.share = function(var_args) {
       result = mobwrite.shareHandlers[x].call(mobwrite, el);
     }
     if (result && result.file) {
+      if (!result.file.match(/^[A-Za-z][-.:\w]*$/)) {
+        if (mobwrite.debug) {
+          window.console.error('Illegal id "' + result.file + '".');
+        }
+        continue;
+      }
       if (result.file in mobwrite.shared) {
         // Already exists.
         // Don't replace, since we don't want to lose state.

@@ -67,10 +67,20 @@ public abstract class ShareObj {
   protected boolean mergeChanges = true;
 
   /**
+   * A file ID must start with a letter and continue with letters, numbers,
+   * dashes, periods, colons or underscores.  From the W3 spec for HTML IDs.
+   */
+   private static Pattern idPattern = Pattern.compile("^[A-Za-z][-.:\\w]*$");
+
+  /**
    * Constructor.  Create a ShareObj with a file ID.
    * @param file Filename to share as.
+   * @throws IllegalArgumentException If filename is illegal.
    */
   public ShareObj(String file) {
+    if (!idPattern.matcher(file).matches()) {
+      throw new IllegalArgumentException("Illegal id " + file);
+    }
     this.file = file;
     this.dmp = new diff_match_patch();
     this.dmp.Diff_Timeout = 0.5f;
@@ -132,12 +142,6 @@ public abstract class ShareObj {
     mobwrite.unshare(this);
     // Create the output starting with the file statement, followed by the edits.
     String data = mobwrite.idPrefix + this.file;
-    try {
-      data = URLEncoder.encode(data, "UTF-8").replace('+', ' ');
-    } catch (UnsupportedEncodingException e) {
-      // Not likely on modern system.
-      throw new Error("This system does not support UTF-8.", e);
-    }
     return "N:" + data + '\n';
   }
 
@@ -212,12 +216,6 @@ public abstract class ShareObj {
 
     // Create the output starting with the file statement, followed by the edits.
     String data = mobwrite.idPrefix + this.file;
-    try {
-      data = URLEncoder.encode(data, "UTF-8").replace('+', ' ');
-    } catch (UnsupportedEncodingException e) {
-      // Not likely on modern system.
-      throw new Error("This system does not support UTF-8.", e);
-    }
     data = "F:" + this.serverVersion + ':' + data + '\n';
     for (Object[] pair : this.editStack) {
       data += (String) pair[1] + '\n';
