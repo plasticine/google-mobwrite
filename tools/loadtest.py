@@ -37,7 +37,7 @@ def makeRequest(url):
   username = "loadtester_" + mobwritelib.uniqueId()
   commands = "U:%s\n" % username
   for x in xrange(20):
-    commands += singleFile()
+    commands += singleDoc()
   commands += "\n"
 
   startTime = time.time()
@@ -48,16 +48,16 @@ def makeRequest(url):
   delta = endTime - startTime
   print "%f seconds" % delta
 
-def singleFile():
-  # Compute a file name.
-  filename = "loadtest_" + mobwritelib.uniqueId()
+def singleDoc():
+  # Compute a document name.
+  docname = "loadtest_" + mobwritelib.uniqueId()
 
   mode = random.randint(1, 3)
   if mode == 1:
-    # Nullify the file.
-    commands = "N:%s\n" % filename
+    # Nullify the document.
+    commands = "N:%s\n" % docname
   else:
-    commands = "F:0:%s\n" % filename
+    commands = "F:0:%s\n" % docname
     if mode == 2:
       # Force a raw dump.
       commands += "R:0:Hello world\n"

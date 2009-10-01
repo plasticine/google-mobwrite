@@ -1,5 +1,3 @@
-#!/usr/bin/python
-
 """MobWrite Library
 
 Copyright 2009 Google Inc.
@@ -30,23 +28,23 @@ import random
 import telnetlib
 import urllib
 
-def download(url, filenames):
-  """Download one or more files from a MobWrite server.
+def download(url, docnames):
+  """Download one or more documents from a MobWrite server.
 
   Args:
     url: An http or telnet URL to a MobWrite server.
         e.g. "http://mobwrite3.appspot.com/scripts/q.py"
         e.g. "telnet://localhost:3017"
-    filenames: A list of filenames to request.
+    docnames: A list of docnames to request.
         e.g. ["title", "text"]
 
   Returns:
-    A dictionary objects mapping file names with file contents.
+    A dictionary objects mapping document names with document contents.
         e.g. {"title": "My Cat", "text": "Once upon a time..."}
   """
   q = ["u:%s" % uniqueId()]
-  for filename in filenames:
-    q.append("f:0:%s\nr:0:" % filename)
+  for docname in docnames:
+    q.append("f:0:%s\nr:0:" % docname)
   q.append("\n")  # Trailing blank line required.
   q = "\n".join(q)
 
@@ -57,7 +55,7 @@ def download(url, filenames):
       data.endswith("\n\r\n\r") or data.endswith("\r\n\r\n")):
     # There must be a linefeed followed by a blank line.
 
-    filename = None
+    docname = None
     for line in data.splitlines():
       if not line:
         # Terminate on blank line.
@@ -75,42 +73,42 @@ def download(url, filenames):
         value = value[div + 1:]
 
       if name == "f" or name == "F":
-        # Remember the filename.
-        filename = value
-      elif filename and (name == "d" or name == "D"):
+        # Remember the docname.
+        docname = value
+      elif docname and (name == "d" or name == "D"):
         # When sent a 'r:' command, the server is expected to reply with 'd:'.
         if value == "=0":
           text = ""
         elif value and value[0] == "+":
           text = urllib.unquote(value[1:])
-        results[filename] = text
-      elif filename and (name == "r" or name == "R"):
+        results[docname] = text
+      elif docname and (name == "r" or name == "R"):
         # The server should not reply with 'r:', but if it does, the answer is
         # just as informative as 'd:'.
-        results[filename] = urllib.unquote(value)
+        results[docname] = urllib.unquote(value)
 
   return results 
 
 def upload(url, dictionary):
-  """Upload one or more files from a MobWrite server.
+  """Upload one or more documents to a MobWrite server.
 
   Args:
     url: An http or telnet URL to a MobWrite server.
         e.g. "http://mobwrite3.appspot.com/scripts/q.py"
         e.g. "telnet://localhost:3017"
-    dictionary: A dictionary with filenames as the keys and content as the data.
+    dictionary: Document names as the keys and document content as the data.
         e.g. {"title": "My Cat", "text": "Once upon a time..."}
 
   Returns:
     True or false, depending on whether the MobWrite server answered.
   """
   q = ["u:%s" % uniqueId()]
-  for filename in dictionary:
-    data = dictionary[filename]
+  for docname in dictionary:
+    data = dictionary[docname]
     # High ascii will raise UnicodeDecodeError.  Use Unicode instead.
     data = data.encode("utf-8")
     data = urllib.quote(data, "!~*'();/?:@&=+$,# ")
-    q.append("f:0:%s\nR:0:%s" % (filename, data))
+    q.append("f:0:%s\nR:0:%s" % (docname, data))
   q.append("\n")  # Trailing blank line required.
   q = "\n".join(q)
 
@@ -119,58 +117,24 @@ def upload(url, dictionary):
   # Maybe in the future this should parse and verify the answer?
   return data.strip() != ""
 
-class ShareObj:
-  # An object which contains one user's view of one text.
-
-  # Object properties:
-  # .username - The name for the user, e.g. 'fraser'
-  # .filename - The name for the file, e.g 'proposal'
-  # .shadow_text - The last version of the text sent to client.
-  # .shadow_client_version - The client's version for the shadow (n).
-  # .shadow_server_version - The server's version for the shadow (m).
-  # .edit_stack - List of unacknowledged edits sent to the client.
-  # .merge_changes - Synchronization mode; True for text, False for numbers.
-  # .text - The client's version of the text.
-
-  def __init__(self, username, filename):
-    # Setup this object
-    self.username = username
-    self.filename = filename
-    self.shadow_text = u""
-    self.shadow_client_version = 0
-    self.shadow_server_version = 0
-    self.edit_stack = []
-    self.text = u""
-
-def syncBlocking(url, textlist):
-  """Upload one or more files from a MobWrite server.
+def nullify(url, docnames):
+  """Nullify one or more documents from a MobWrite server.
 
   Args:
     url: An http or telnet URL to a MobWrite server.
         e.g. "http://mobwrite3.appspot.com/scripts/q.py"
         e.g. "telnet://localhost:3017"
-    textlist: An array of configuration objects, one for each text to sync.
-        As a minimum each object must have a filename.
-        e.g. [{"filename": "title", "serverversion": 2, ...}]
-
-  Returns:
-    True or false, depending on whether the MobWrite server answered.
+    docnames: A list of docnames to nullify.
+        e.g. ["title", "text"]
   """
-  #q = ["u:%s" % uniqueId()]
-  #for filename in dictionary:
-  #  data = dictionary[filename]
-  #  # High ascii will raise UnicodeDecodeError.  Use Unicode instead.
-  #  data = data.encode("utf-8")
-  #  data = urllib.quote(data, "!~*'();/?:@&=+$,# ")
-  #  q.append("f:0:%s\nR:0:%s" % (filename, data))
-  #q.append("\n")  # Trailing blank line required.
-  #q = "\n".join(q)
+  q = ["u:%s" % uniqueId()]
+  for docname in docnames:
+    q.append("n:%s" % docname)
+  q.append("\n")  # Trailing blank line required.
+  q = "\n".join(q)
 
-  #data = send(url, q)
-  # Ignore the response, but check that there is one.
-  # Maybe in the future this should parse and verify the answer?
-  #return data.strip() != ""
-  return True
+  send(url, q)
+  # There probably won't be a response.
 
 def send(url, commands):
   """Send some raw commands to a MobWrite server, return the raw answer.

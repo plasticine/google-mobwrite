@@ -95,12 +95,12 @@ public class MobWriteClient {
   /**
    * Unique ID for this session.
    */
-  private String syncUsername;
+  protected String syncUsername;
 
   /**
    * Hash of all shared objects.
    */
-  private Map<String, ShareObj> shared;
+  protected Map<String, ShareObj> shared;
 
   /**
    * Logging object.
@@ -153,7 +153,7 @@ public class MobWriteClient {
   /**
    * Collect all client-side changes and send them to the server.
    */
-  private void syncRun1_() {
+  protected void syncRun1_() {
     // Initialize clientChange_, to be checked at the end of syncRun2_.
     this.clientChange_ = false;
     StringBuilder data = new StringBuilder();

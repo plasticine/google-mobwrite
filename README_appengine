@@ -25,11 +25,7 @@ static/tests/server.html  Unit test framework for server.
 static/tests/server.xml   Unit test data for server.
 static/tests/q.html       Manual test test for server.
 
-tools/download.py    Command-line tool for downloading content from MobWrite.
-tools/upload.py      Command-line tool for uploading content to MobWrite.
-tools/sync.py        Command-line tool for synchronizing content with MobWrite.
-tools/demo.cfg       Sample configuration file for sync.py.
-tools/mobwritelib.py Python library for connecting with MobWrite.
+tools/  Command-line tools for interfacing with MobWrite.
 
 Documentation:
   http://code.google.com/p/google-mobwrite/

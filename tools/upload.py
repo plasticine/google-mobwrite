@@ -17,11 +17,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-"""This command-line program uploads a file to a MobWrite server.
+"""This command-line program uploads a document to a MobWrite server.
 
-The MobWrite URL and the filename are provided on the command line.
-The file content is taken from standard input.
-The file is forcibly uploaded, no merging takes place.
+The MobWrite URL and the docname are provided on the command line.
+The document content is taken from standard input.
+The document is forcibly uploaded, no merging takes place.
 """
 
 __author__ = "fraser@google.com (Neil Fraser)"
@@ -30,15 +30,15 @@ import mobwritelib
 import sys
 
 if __name__ == "__main__":
-  # Obtain the server URL and the filename from the command line argument.
+  # Obtain the server URL and the docname from the command line argument.
   if len(sys.argv) != 3:
-    print >> sys.stderr, "Usage:  %s <URL> <FILENAME>" % sys.argv[0]
+    print >> sys.stderr, "Usage:  %s <URL> <DOCNAME>" % sys.argv[0]
     print >> sys.stderr, "  E.g.  %s http://mobwrite3.appspot.com/scripts/q.py demo_editor_text" % sys.argv[0]
     print >> sys.stderr, "  E.g.  %s telnet://localhost:3017 demo_editor_text" % sys.argv[0]
     sys.exit(2)
   url = sys.argv[1]
-  filename = sys.argv[2]
+  docname = sys.argv[2]
   data = "".join(sys.stdin.readlines())
-  success = mobwritelib.upload(url, {filename: data})
+  success = mobwritelib.upload(url, {docname: data})
   if not success:
     sys.exit("Error: MobWrite server failed to respond.")

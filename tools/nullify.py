@@ -1,5 +1,5 @@
 #!/usr/bin/python
-"""MobWrite Downloader
+"""MobWrite Nullifier
 
 Copyright 2009 Google Inc.
 http://code.google.com/p/google-mobwrite/
@@ -17,11 +17,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-"""This command-line program downloads a document from a MobWrite server.
+"""This command-line program nullifies a document from a MobWrite server.
 
 The MobWrite URL and the docname are provided on the command line.
-The document content is printed to standard output.
-Version numbers are not tracked.
 """
 
 __author__ = "fraser@google.com (Neil Fraser)"
@@ -38,9 +36,4 @@ if __name__ == "__main__":
     sys.exit(2)
   url = sys.argv[1]
   docname = sys.argv[2]
-  results = mobwritelib.download(url, [docname])
-  if docname in results:
-    if results.get(docname):
-      print results.get(docname),
-  else:
-    sys.exit("Error: MobWrite server failed to provide data.")
+  mobwritelib.nullify(url, [docname])
