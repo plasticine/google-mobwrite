@@ -28,6 +28,7 @@ sync.jar
 Command-line tool for synchronizing content with MobWrite.
 This tool synchronizes a file once per execution.  On first execution a temporary file
 is created which contains local versioning information for the shared document.
+Full source code is available inside the JAR file.
 Note that sync.jar does not currently support the telnet protocol.
 Usage:  java -jar sync.jar <URL> <DOCNAME> <FILENAME>
   E.g.  java -jar sync.jar http://mobwrite3.appspot.com/scripts/q.py demo_editor_text text.txt
@@ -35,6 +36,9 @@ Usage:  java -jar sync.jar <URL> <DOCNAME> <FILENAME>
 mobwritelib.py
 Python library for connecting with MobWrite.
 Provides functions for uploading, downloading and nullifying documents.
+
+toolstest.py
+Unit tests for download.py, upload.py, nullify.py and sync.jar.
 
 loadtest.py
 Command-line tool to stress a MobWrite server.

@@ -1,4 +1,3 @@
-#!/usr/bin/python
 """MobWrite - Real-time Synchronization and Collaboration Service
 
 Copyright 2009 Google Inc.
@@ -29,25 +28,80 @@ import re
 
 # Global Diff/Match/Patch object.
 DMP = dmp_module.diff_match_patch()
-DMP.Diff_Timeout = 0.1
-
-# Demo usage should limit the maximum size of any text.
-# Set to 0 to disable limit.
-MAX_CHARS = 100000
-
-# Delete any view which hasn't been accessed in half an hour.
-TIMEOUT_VIEW = datetime.timedelta(minutes=30)
-
-# Delete any text which hasn't been accessed in a day.
-# TIMEOUT_TEXT should be longer than the length of TIMEOUT_VIEW
-TIMEOUT_TEXT = datetime.timedelta(days=1)
-
-# Delete any buffer which hasn't been written to in a quarter of an hour.
-TIMEOUT_BUFFER = datetime.timedelta(minutes=15)
-
+# Global logging object.
 LOG = logging.getLogger("mobwrite")
-# Choose from: CRITICAL, ERROR, WARNING, INFO, DEBUG
-LOG.setLevel(logging.DEBUG)
+
+
+def setConfig():
+  """Parse the config file and setup the preferences.
+
+  Throws:
+    If the config is invalid, this function will thow an error.
+  """
+  def readConfigFile(filename):
+    data = {}
+    lineRegex = re.compile("^(\w+)\s*=\s*(.+)$")
+
+    # Attempt to open the file.
+    try:
+      f = open(filename)
+    except:
+      return data
+
+    # Parse the file.
+    try:
+      for line in f:
+        line = line.strip()
+        # Comment lines start with a ;
+        if len(line) > 0 and not line.startswith(";"):
+          r = lineRegex.match(line)
+          if r:
+            data[r.group(1)] = r.group(2)
+    finally:
+      f.close()
+    return data
+
+  def toTime(value):
+    (quantity, unit) = value.split(None, 1)
+    quantity = int(quantity)
+    if (unit == "seconds"):
+      delta = datetime.timedelta(seconds=quantity)
+    elif (unit == "minutes"):
+      delta = datetime.timedelta(minutes=quantity)
+    elif (unit == "hours"):
+      delta = datetime.timedelta(hours=quantity)
+    elif (unit == "days"):
+      delta = datetime.timedelta(days=quantity)
+    else:
+      raise "Config: Unknown time value."
+    return delta
+
+  data = readConfigFile("mobwrite_config.txt")
+
+  # Set each of the configuration parameters.
+  # If a parameter is not present, a reasonable default is specified here.
+  # If a configuration is invalid, throw an error.
+  DMP.Diff_Timeout = float(data.get("DIFF_TIMEOUT", 0.1))
+  MAX_CHARS = int(data.get("MAX_CHARS", 100000))
+  TIMEOUT_VIEW = toTime(data.get("TIMEOUT_VIEW", "30 minutes"))
+  TIMEOUT_TEXT = toTime(data.get("TIMEOUT_TEXT", "1 days"))
+  TIMEOUT_BUFFER = toTime(data.get("TIMEOUT_BUFFER", "15 minutes"))
+
+  logLevel = data.get("LOGGING", "INFO")
+  if logLevel == "CRITICAL":
+    LOG.setLevel(logging.CRITICAL)
+  elif logLevel == "ERROR":
+    LOG.setLevel(logging.ERROR)
+  elif logLevel == "WARNING":
+    LOG.setLevel(logging.WARNING)
+  elif logLevel == "INFO":
+    LOG.setLevel(logging.INFO)
+  elif logLevel == "DEBUG":
+    LOG.setLevel(logging.DEBUG)
+  else:
+    raise "Config: Unknown logging level."
+
+setConfig()
 
 
 class TextObj:
