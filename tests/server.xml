@@ -484,9 +484,9 @@ d:0:=1	-1	=2
 
   <TEST NAME="Simple collaboration">
     <DESCRIPTION>
-    Clients A and B have 'Hello world'.
+    Clients A and B have 'Hello world' at version 0.
     Client B changes 'Hello' to 'Goodbye'.
-    Client A polls for changes.
+    A polls the server by incrementing version to 1 with no changes.
     The server tells A to change 'Hello' to 'Goodbye'.
     </DESCRIPTION>
     <QUESTION>
@@ -515,6 +515,12 @@ d:0:-5	+Goodbye	=6
   </TEST>
 
   <TEST NAME="Simple merge">
+    <DESCRIPTION>
+    Clients A and B have 'Hello world'.
+    Client B changes 'Hello' to 'Goodbye'.
+    Client A changes 'world' to 'worm'.
+    In reply, server tells A to change 'Hello' to 'Goodbye'.
+    </DESCRIPTION>
     <QUESTION>
 f:0:unittest[RANDOM]
 u:user[RANDOM]a
@@ -554,6 +560,12 @@ d:1:-5	+Goodbye	=5
   </TEST>
 
   <TEST NAME="Conflicting merge">
+    <DESCRIPTION>
+    Clients A and B have 'Hello world'.
+    B changes 'Hello' to 'Goodbye'.
+    A changes 'Hello' to 'My'.
+    Server tells A to change 'My' to 'Goodbye' (first change wins).
+    </DESCRIPTION>
     <QUESTION>
 f:0:unittest[RANDOM]
 U:user[RANDOM]a
@@ -594,6 +606,12 @@ d:1:-2	+Goodbye	=6
   </TEST>
 
   <TEST NAME="Text merge">
+    <DESCRIPTION>
+    Clients A and B have 'bc'.
+    Client B changes it to 'abc'.
+    Client A changes it to 'bcd'.
+    Server tells A to change it to 'abcd'.
+    </DESCRIPTION>
     <QUESTION>
 f:0:unittest[RANDOM]
 U:user[RANDOM]a
@@ -634,6 +652,15 @@ d:1:+a	=3
   </TEST>
 
   <TEST NAME="Numeric merge">
+    <DESCRIPTION>
+    Clients A and B have '23'.
+    Client B changes it to '123'.
+    Client A changes it to '234'.
+    Server doesn't tell A to change it (B's change loses).
+    (Note that the difference between this and the previous test
+    is because the last delta is sent with an uppercase 'D', not
+    because the data is numeric.)
+    </DESCRIPTION>
     <QUESTION>
 f:0:unittest[RANDOM]
 U:user[RANDOM]a
@@ -754,6 +781,12 @@ D:0:=11
   </TEST>
 
   <TEST NAME="Duplicate packet">
+    <DESCRIPTION>
+    Client creates 'Hello world'.
+    Client changes 'Hello' to 'Goodbye'.
+    Duplicate packet changes 'Hello' to 'Goodbye' again.
+    The server's reponse is the same as the first time.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]
 f:0:unittest[RANDOM]
@@ -790,6 +823,15 @@ d:1:=13
   </TEST>
 
   <TEST NAME="Lost return packet">
+    <DESCRIPTION>
+    Client A has 'Hello world' at version 0.
+    Client B has 'Goodbye world' (overwrites A).
+    A increments version to 1, with no changes.
+    Server tells A to change 'Hello' to 'Goodbye', but A doesn't get it.
+    A tells server it is still at version 1, and there are no changes
+    from 0 to 1 or from 1 to 2.
+    Server resends change from 'Hello' to 'Goodbye'.
+    </DESCRIPTION>
     <QUESTION>
 u:user[RANDOM]a
 f:0:unittest[RANDOM]
