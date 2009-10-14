@@ -1,4 +1,23 @@
-package name.fraser.neil.mobwrite;
+/**
+ * MobWrite - Real-time Synchronization and Collaboration Service
+ *
+ * Copyright 2009 Google Inc.
+ * http://code.google.com/p/google-mobwrite/
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.mobwrite;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
@@ -212,6 +231,10 @@ public abstract class ShareObj {
       String action = "r:" + this.clientVersion + ':' + data;
       // Append the action to the edit stack.
       this.editStack.push(new Object[]{this.clientVersion, action});
+      // Sending a raw dump will put us back in sync.
+      // Set deltaOk to true in case this sync fails to connect, in which case
+      // the following sync(s) should be a delta, not more raw dumps.
+      this.deltaOk = true;
     }
 
     // Create the output starting with the file statement, followed by the edits.

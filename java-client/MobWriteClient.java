@@ -17,7 +17,7 @@
  * limitations under the License.
  */
 
-package name.fraser.neil.mobwrite;
+package com.google.mobwrite;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;

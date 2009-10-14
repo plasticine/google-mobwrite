@@ -1,4 +1,4 @@
-package name.fraser.neil.mobwrite;
+package com.google.mobwrite;
 
 import java.awt.Font;
 import javax.swing.JApplet;

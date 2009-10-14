@@ -384,6 +384,10 @@ mobwrite.shareObj.prototype.syncText = function() {
                  encodeURI(clientText).replace(/%20/g, ' ');
     // Append the action to the edit stack.
     this.editStack.push([this.clientVersion, action]);
+    // Sending a raw dump will put us back in sync.
+    // Set deltaOk to true in case this sync fails to connect, in which case
+    // the following sync(s) should be a delta, not more raw dumps.
+    this.deltaOk = true;
   }
 
   // Create the output starting with the file statement, followed by the edits.
