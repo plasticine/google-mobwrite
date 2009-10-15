@@ -1,4 +1,5 @@
-#!/usr/bin/python
+#!/usr/bin/python2.5
+
 """MobWrite - Real-time Synchronization and Collaboration Service
 
 Copyright 2006 Google Inc.
@@ -114,11 +115,11 @@ class TextObj(mobwrite_core.TextObj):
     try:
       if STORAGE_MODE == MEMORY:
         if self.lasttime < datetime.datetime.now() - mobwrite_core.TIMEOUT_TEXT:
-          mobwrite_core.LOG.info("Expired text: '%s'" % self.name)
+          mobwrite_core.LOG.info("Expired text: '%s'" % self)
           terminate = True
       else:
         # Delete myself from memory if there are no attached views.
-        mobwrite_core.LOG.info("Unloading text: '%s'" % self.name)
+        mobwrite_core.LOG.info("Unloading text: '%s'" % self)
         terminate = True
 
       if terminate:
@@ -131,7 +132,7 @@ class TextObj(mobwrite_core.TextObj):
           del texts[self.name]
         except KeyError:
           mobwrite_core.LOG.error("Text object not in text list: '%s'" %
-                                    self.name)
+                                    self)
         finally:
           lock_texts.release()
       else:
@@ -162,7 +163,7 @@ class TextObj(mobwrite_core.TextObj):
       # Load the text (if present) from database.
       if texts_db.has_key(self.name):
         self.setText(texts_db[self.name].decode("utf-8"))
-        mobwrite_core.LOG.info("Loaded from DB: '%s'" % self.name)
+        mobwrite_core.LOG.info("Loaded from DB: '%s'" % self)
       else:
         self.setText(None)
       self.changed = False
@@ -201,9 +202,9 @@ class TextObj(mobwrite_core.TextObj):
           del lasttime_db[self.name]
         if texts_db.has_key(self.name):
           del texts_db[self.name]
-          mobwrite_core.LOG.info("Nullified from DB: '%s'" % self.name)
+          mobwrite_core.LOG.info("Nullified from DB: '%s'" % self)
       else:
-        mobwrite_core.LOG.info("Saved to DB: '%s'" % self.name)
+        mobwrite_core.LOG.info("Saved to DB: '%s'" % self)
         texts_db[self.name] = self.text.encode("utf-8")
         lasttime_db[self.name] = str(int(time.time()))
       self.changed = False
@@ -251,6 +252,7 @@ class ViewObj(mobwrite_core.ViewObj):
   # .shadow_server_version - The server's version for the shadow (m).
   # .backup_shadow_server_version - the server's version for the backup
   #     shadow (m).
+  # .delta_ok - Did the previous delta match the text length.
 
   def __init__(self, *args, **kwargs):
     # Setup this object
@@ -272,14 +274,12 @@ class ViewObj(mobwrite_core.ViewObj):
     lock_views.acquire()
     try:
       if self.lasttime < datetime.datetime.now() - mobwrite_core.TIMEOUT_VIEW:
-        mobwrite_core.LOG.info("Idle out: '%s@%s'" %
-                               (self.username, self.filename))
+        mobwrite_core.LOG.info("Idle out: '%s'" % self)
         global views
         try:
           del views[(self.username, self.filename)]
         except KeyError:
-          mobwrite_core.LOG.error("View object not in view list: '%s %s'" %
-                                  (self.username, self.filename))
+          mobwrite_core.LOG.error("View object not in view list: '%s'" % self)
         self.textobj.views -= 1
     finally:
       lock_views.release()
@@ -299,14 +299,14 @@ def fetch_viewobj(username, filename):
     if views.has_key(key):
       viewobj = views[key]
       viewobj.lasttime = datetime.datetime.now()
-      mobwrite_core.LOG.debug("Accepting view: '%s@%s'" % key)
+      mobwrite_core.LOG.debug("Accepting view: '%s'" % viewobj)
     else:
       if MAX_VIEWS != 0 and len(views) > MAX_VIEWS:
         viewobj = None
         mobwrite_core.LOG.critical("Overflow: Can't create new view.")
       else:
         viewobj = ViewObj(username=username, filename=filename)
-        mobwrite_core.LOG.debug("Creating view: '%s@%s'" % key)
+        mobwrite_core.LOG.debug("Creating view: '%s'" % viewobj)
   finally:
     lock_views.release()
   return viewobj
@@ -483,13 +483,12 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
           # Too many views connected at once.
           # Send back nothing.  Pretend the return packet was lost.
           return ""
-        delta_ok = True
+        viewobj.delta_ok = True
         textobj = viewobj.textobj
 
       if action["mode"] == "null":
         # Nullify the text.
-        mobwrite_core.LOG.debug("Nullifying: '%s@%s'" %
-            (viewobj.username, viewobj.filename))
+        mobwrite_core.LOG.debug("Nullifying: '%s'" % viewobj)
         textobj.lock.acquire()
         try:
           textobj.setText(None)
@@ -520,9 +519,8 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
       if action["mode"] == "raw":
         # It's a raw text dump.
         data = urllib.unquote(action["data"]).decode("utf-8")
-        mobwrite_core.LOG.info("Got %db raw text: '%s@%s'" %
-            (len(data), viewobj.username, viewobj.filename))
-        delta_ok = True
+        mobwrite_core.LOG.info("Got %db raw text: '%s'" % (len(data), viewobj))
+        viewobj.delta_ok = True
         # First, update the client's shadow.
         viewobj.shadow = data
         viewobj.shadow_client_version = action["client_version"]
@@ -536,23 +534,21 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
           try:
             if textobj.text != data:
               textobj.setText(data)
-              mobwrite_core.LOG.debug("Overwrote content: '%s@%s'" %
-                  (viewobj.username, viewobj.filename))
+              mobwrite_core.LOG.debug("Overwrote content: '%s'" % viewobj)
           finally:
             textobj.lock.release()
 
       elif action["mode"] == "delta":
         # It's a delta.
-        mobwrite_core.LOG.info("Got '%s' delta: '%s@%s'" %
-            (action["data"], viewobj.username, viewobj.filename))
+        mobwrite_core.LOG.info("Got '%s' delta: '%s'" % (action["data"], viewobj))
         if action["server_version"] != viewobj.shadow_server_version:
           # Can't apply a delta on a mismatched shadow version.
-          delta_ok = False
+          viewobj.delta_ok = False
           mobwrite_core.LOG.warning("Shadow version mismatch: %d != %d" %
               (action["server_version"], viewobj.shadow_server_version))
         elif action["client_version"] > viewobj.shadow_client_version:
           # Client has a version in the future?
-          delta_ok = False
+          viewobj.delta_ok = False
           mobwrite_core.LOG.warning("Future delta: %d > %d" %
               (action["client_version"], viewobj.shadow_client_version))
         elif action["client_version"] < viewobj.shadow_client_version:
@@ -566,9 +562,9 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
             diffs = mobwrite_core.DMP.diff_fromDelta(viewobj.shadow, action["data"])
           except ValueError:
             diffs = None
-            delta_ok = False
-            mobwrite_core.LOG.warning("Delta failure, expected %d length: '%s@%s'" %
-                (len(viewobj.shadow), viewobj.username, viewobj.filename))
+            viewobj.delta_ok = False
+            mobwrite_core.LOG.warning("Delta failure, expected %d length: '%s'" %
+                (len(viewobj.shadow), viewobj))
           viewobj.shadow_client_version += 1
           if diffs != None:
             # Textobj lock required for read/patch/write cycle.
@@ -585,8 +581,7 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
           actions[action_index + 1]["filename"] != viewobj.filename):
         output.append(self.generateDiffs(viewobj,
                                          last_username, last_filename,
-                                         action["echo_username"], action["force"],
-                                         delta_ok))
+                                         action["echo_username"], action["force"]))
         last_username = viewobj.username
         last_filename = viewobj.filename
         # Dereference the view object so that a new one can be created.
@@ -596,7 +591,7 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
 
 
   def generateDiffs(self, viewobj, last_username, last_filename,
-                    echo_username, force, delta_ok):
+                    echo_username, force):
     output = []
     if (echo_username and last_username != viewobj.username):
       output.append("u:%s\n" %  viewobj.username)
@@ -607,7 +602,7 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
     textobj = viewobj.textobj
     mastertext = textobj.text
 
-    if delta_ok:
+    if viewobj.delta_ok:
       if mastertext is None:
         mastertext = ""
       # Create the diff between the view's text and the master text.
@@ -627,8 +622,7 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
         viewobj.edit_stack.append((viewobj.shadow_server_version,
             "d:%d:%s\n" % (viewobj.shadow_server_version, text)))
       viewobj.shadow_server_version += 1
-      mobwrite_core.LOG.info("Sent '%s' delta: '%s@%s'" %
-          (text, viewobj.username, viewobj.filename))
+      mobwrite_core.LOG.info("Sent '%s' delta: '%s'" % (text, viewobj))
     else:
       # Error; server could not parse client's delta.
       # Send a raw dump of the text.
@@ -637,8 +631,7 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
         mastertext = ""
         viewobj.edit_stack.append((viewobj.shadow_server_version,
             "r:%d:\n" % viewobj.shadow_server_version))
-        mobwrite_core.LOG.info("Sent empty raw text: '%s@%s'" %
-            (viewobj.username, viewobj.filename))
+        mobwrite_core.LOG.info("Sent empty raw text: '%s'" % viewobj)
       else:
         # Force overwrite of client.
         text = mastertext
@@ -646,8 +639,8 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
         text = urllib.quote(text, "!~*'();/?:@&=+$,# ")
         viewobj.edit_stack.append((viewobj.shadow_server_version,
             "R:%d:%s\n" % (viewobj.shadow_server_version, text)))
-        mobwrite_core.LOG.info("Sent %db raw text: '%s@%s'" %
-            (len(text), viewobj.username, viewobj.filename))
+        mobwrite_core.LOG.info("Sent %db raw text: '%s'" %
+            (len(text), viewobj))
 
     viewobj.shadow = mastertext
 

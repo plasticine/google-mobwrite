@@ -19,7 +19,7 @@ cp remote-demos/index.html remote-demos/editor.html remote-demos/form.html remot
 mkdir mobwrite/tests
 cp tests/index.html tests/client.html tests/client.js tests/q.html tests/server.html tests/server.xml mobwrite/tests/
 mkdir mobwrite/tools
-cp tools/README.txt tools/download.py tools/upload.py tools/nullify.py tools/loadtest.py tools/mobwritelib.py tools/sync.jar tools/demo.cfg mobwrite/tools/
+cp tools/README.txt tools/download.py tools/upload.py tools/nullify.py tools/loadtest.py tools/mobwritelib.py tools/sync.jar mobwrite/tools/
 mkdir mobwrite/java-client
 cp java-client/*.java mobwrite/java-client
 zip -q -r mobwrite mobwrite
@@ -41,7 +41,7 @@ cp remote-demos/index.html remote-demos/editor.html remote-demos/form.html remot
 mkdir mobwrite/static/tests
 cp tests/index.html tests/client.html tests/client.js tests/q.html tests/server.html tests/server.xml mobwrite/static/tests/
 mkdir mobwrite/tools
-cp tools/README.txt tools/download.py tools/upload.py tools/nullify.py tools/loadtest.py tools/mobwritelib.py tools/sync.jar tools/demo.cfg mobwrite/tools/
+cp tools/README.txt tools/download.py tools/upload.py tools/nullify.py tools/loadtest.py tools/mobwritelib.py tools/sync.jar mobwrite/tools/
 mkdir mobwrite/java-client
 cp java-client/*.java mobwrite/java-client
 zip -q -r mobwrite mobwrite

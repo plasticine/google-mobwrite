@@ -38,6 +38,8 @@ def setConfig():
   Throws:
     If the config is invalid, this function will thow an error.
   """
+  global MAX_CHARS, TIMEOUT_VIEW, TIMEOUT_TEXT, TIMEOUT_BUFFER
+
   def readConfigFile(filename):
     data = {}
     lineRegex = re.compile("^(\w+)\s*=\s*(.+)$")
@@ -144,6 +146,7 @@ class ViewObj:
   # .shadow_server_version - The server's version for the shadow (m).
   # .backup_shadow_server_version - the server's version for the backup
   #     shadow (m).
+  # .delta_ok - Did the previous delta match the text length.
 
   def __init__(self, *args, **kwargs):
     # Setup this object
@@ -154,6 +157,7 @@ class ViewObj:
     self.backup_shadow_server_version = kwargs.get("backup_shadow_server_version", 0)
     self.shadow = kwargs.get("shadow", u"")
     self.backup_shadow = kwargs.get("backup_shadow", u"")
+    self.delta_ok = True
 
 
 class MobWrite:
@@ -306,20 +310,17 @@ class MobWrite:
       # A view is sending a valid delta on a file we've never heard of.
       textobj.setText(viewobj.shadow)
       action["force"] = False
-      LOG.debug("Set content: '%s@%s'" %
-          (viewobj.username, viewobj.filename))
+      LOG.debug("Set content: '%s'" % viewobj)
     else:
       if action["force"]:
         # Clobber the server's text if a change was received.
         if patches:
           mastertext = viewobj.shadow
-          LOG.debug("Overwrote content: '%s@%s'" %
-              (viewobj.username, viewobj.filename))
+          LOG.debug("Overwrote content: '%s'" % viewobj)
         else:
           mastertext = textobj.text
       else:
         (mastertext, results) = DMP.patch_apply(patches, textobj.text)
-        LOG.debug("Patched (%s): '%s@%s'" %
-            (",".join(["%s" % (x) for x in results]),
-             viewobj.username, viewobj.filename))
+        LOG.debug("Patched (%s): '%s'" %
+            (",".join(["%s" % (x) for x in results]), viewobj))
       textobj.setText(mastertext)
