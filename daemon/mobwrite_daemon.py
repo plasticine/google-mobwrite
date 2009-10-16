@@ -239,7 +239,6 @@ class ViewObj(mobwrite_core.ViewObj):
   # A persistent object which contains one user's view of one text.
 
   # Object properties:
-  # .edit_stack - List of unacknowledged edits sent to the client.
   # .lasttime - The last time that a web connection serviced this object.
   # .textobj - The shared text object being worked on.
 
@@ -252,12 +251,13 @@ class ViewObj(mobwrite_core.ViewObj):
   # .shadow_server_version - The server's version for the shadow (m).
   # .backup_shadow_server_version - the server's version for the backup
   #     shadow (m).
+  # .edit_stack - List of unacknowledged edits sent to the client.
+  # .changed - Has the view changed since the last time it was saved.
   # .delta_ok - Did the previous delta match the text length.
 
   def __init__(self, *args, **kwargs):
     # Setup this object
     mobwrite_core.ViewObj.__init__(self, *args, **kwargs)
-    self.edit_stack = []
     self.lasttime = datetime.datetime.now()
     self.textobj = fetch_textobj(self.filename, self)
 
@@ -475,10 +475,12 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
       # Use an indexed loop in order to peek ahead one step to detect
       # username/filename boundaries.
       action = actions[action_index]
+      username = action["username"]
+      filename = action["filename"]
 
       # Fetch the requested view object.
       if not viewobj:
-        viewobj = fetch_viewobj(action["username"], action["filename"])
+        viewobj = fetch_viewobj(username, filename)
         if viewobj is None:
           # Too many views connected at once.
           # Send back nothing.  Pretend the return packet was lost.
@@ -577,27 +579,33 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
       # Generate output if this is the last action or the username/filename
       # will change in the next iteration.
       if ((action_index + 1 == len(actions)) or
-          actions[action_index + 1]["username"] != viewobj.username or
-          actions[action_index + 1]["filename"] != viewobj.filename):
-        output.append(self.generateDiffs(viewobj,
-                                         last_username, last_filename,
-                                         action["echo_username"], action["force"]))
-        last_username = viewobj.username
-        last_filename = viewobj.filename
+          actions[action_index + 1]["username"] != username or
+          actions[action_index + 1]["filename"] != filename):
+        print_username = None
+        print_filename = None
+        if action["echo_username"] and last_username != username:
+          # Print the username if the previous action was for a different user.
+          print_username = username
+        if last_filename != filename or last_username != username:
+          # Print the filename if the previous action was for a different user
+          # or file.
+          print_filename = filename
+        output.append(self.generateDiffs(viewobj, print_username,
+                                         print_filename, action["force"]))
+        last_username = username
+        last_filename = filename
         # Dereference the view object so that a new one can be created.
         viewobj = None
 
     return "".join(output)
 
 
-  def generateDiffs(self, viewobj, last_username, last_filename,
-                    echo_username, force):
+  def generateDiffs(self, viewobj, print_username, print_filename, force):
     output = []
-    if (echo_username and last_username != viewobj.username):
-      output.append("u:%s\n" %  viewobj.username)
-    if (last_filename != viewobj.filename or last_username != viewobj.username):
-      output.append("F:%d:%s\n" %
-          (viewobj.shadow_client_version, viewobj.filename))
+    if print_username:
+      output.append("u:%s\n" %  print_username)
+    if print_filename:
+      output.append("F:%d:%s\n" % (viewobj.shadow_client_version, print_filename))
 
     textobj = viewobj.textobj
     mastertext = textobj.text
@@ -643,6 +651,7 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
             (len(text), viewobj))
 
     viewobj.shadow = mastertext
+    viewobj.changed = True
 
     for edit in viewobj.edit_stack:
       output.append(edit[1])

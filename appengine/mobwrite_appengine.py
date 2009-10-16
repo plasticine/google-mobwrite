@@ -26,6 +26,7 @@ Accepting synchronization sessions from clients.
 __author__ = "fraser@google.com (Neil Fraser)"
 
 import cgi
+import cPickle
 import datetime
 import os
 import sys
@@ -102,7 +103,7 @@ class ViewObj(mobwrite_core.ViewObj, db.Model):
   # An object which contains one user's view of one text.
 
   # Object properties:
-  # .edit_stack - List of unacknowledged edits sent to the client.
+  # .edit_pickle - Pickled version of edit stack.
   # .lasttime - The last time that a web connection serviced this object.
   # .textobj - The shared text object being worked on.
 
@@ -115,6 +116,8 @@ class ViewObj(mobwrite_core.ViewObj, db.Model):
   # .shadow_server_version - The server's version for the shadow (m).
   # .backup_shadow_server_version - the server's version for the backup
   #     shadow (m).
+  # .edit_stack - List of unacknowledged edits sent to the client.
+  # .changed - Has the view changed since the last time it was saved.
   # .delta_ok - Did the previous delta match the text length.
 
   username = db.StringProperty(required=True)
@@ -124,7 +127,7 @@ class ViewObj(mobwrite_core.ViewObj, db.Model):
   shadow_client_version = db.IntegerProperty(required=True)
   shadow_server_version = db.IntegerProperty(required=True)
   backup_shadow_server_version = db.IntegerProperty(required=True)
-  edit_stack = db.TextProperty()
+  edit_pickle = db.TextProperty()
   lasttime = db.DateTimeProperty(auto_now=True)
   textobj = db.ReferenceProperty(TextObj)
 
@@ -138,30 +141,22 @@ class ViewObj(mobwrite_core.ViewObj, db.Model):
     db.Model.__init__(self, *args, **kwargs)
 
   def nullify(self):
-    try:
-      mobwrite_core.LOG.debug("Nullified ViewObj: '%s'" % self)
-      self.delete()
-    except db.NotSavedError:
-      # This ViewObj never made it to the database, nothing to delete.
-      pass
+    mobwrite_core.ViewObj.__init__(self, username=self.username,
+                                         filename=self.filename)
+    self.shadow = None
+    self.changed = True
+    mobwrite_core.LOG.debug("Nullified ViewObj: '%s'" % self)
 
   def __str__(self):
     if self.is_saved():
       return str(self.key().id_or_name())
     return "[Unsaved ViewObj%x]" % id(self)
 
-def fetchUserViews(username):
-  query = db.GqlQuery("SELECT * FROM ViewObj WHERE username = :1", username)
-  # Convert list to a hash.
-  views = {}
-  for viewobj in query:
-    mobwrite_core.LOG.debug("Loaded %db ViewObj: '%s'" %
-        (len(viewobj.shadow), viewobj))
-    views[viewobj.filename] = viewobj
-  if len(views) == 0:
-    mobwrite_core.LOG.debug("Unable to find any ViewObj for: '%s'" % username)
-  return views
-
+  def getKey(username, filename):
+    # DataStore doesn't like names starting with numbers.
+    name = "_%s@%s" % (username, filename)
+    return db.Key.from_path(ViewObj.kind(), name)
+  getKey = staticmethod(getKey)
 
 class AppEngineMobWrite(mobwrite_core.MobWrite):
 
@@ -251,7 +246,63 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
     actions = self.parseRequest(text)
     return self.doActions(actions)
 
+  def loadViews(self, actions):
+    # Enumerate all the requested view objects.
+    # Build a list of database keys and ids for each object
+    viewobj_keys = []
+    viewobj_ids = []
+    for action in actions:
+      if (action["username"], action["filename"]) not in viewobj_ids:
+        viewobj_ids.append((action["username"], action["filename"]))
+        viewobj_keys.append(ViewObj.getKey(action["username"], action["filename"]))
+
+    # Load all needed view objects from Datastore
+    viewobj_values = db.get(viewobj_keys)
+
+    # Populate the hashes and create any missing objects.
+    viewobjs = {}
+    for index in xrange(len(viewobj_ids)):
+      id = viewobj_ids[index]
+      viewobj = viewobj_values[index]
+      if viewobj is None:
+        viewobj = ViewObj(key_name=viewobj_keys[index].name(),
+            username=action["username"], filename=action["filename"])
+        mobwrite_core.LOG.debug("Created new ViewObj: '%s'" % viewobj)
+      else:
+        # Uncompress the edit stack from a string.
+        viewobj.edit_stack = cPickle.loads(str(viewobj.edit_pickle))
+        mobwrite_core.LOG.debug("Loaded %db ViewObj: '%s'" %
+            (len(viewobj.shadow), viewobj))
+      viewobjs[id] = viewobj
+    return viewobjs
+
+  def saveViews(self, viewobjs):
+    # Build unified list of objects to save to Datastore.
+    save = []
+    delete = []
+
+    for viewobj in viewobjs.values():
+      if viewobj.shadow is None:
+        mobwrite_core.LOG.debug("Nullified ViewObj: '%s'" % viewobj)
+        if viewobj.is_saved():
+          delete.append(viewobj)
+      elif viewobj.changed:
+        # Compress the edit stack into a string.
+        viewobj.edit_pickle = cPickle.dumps(viewobj.edit_stack)
+        mobwrite_core.LOG.debug("Saved %db ViewObj: '%s'" %
+            (len(viewobj.shadow), viewobj))
+        save.append(viewobj)
+        viewobj.changed = False
+
+    # Perform Datastore actions for multiple objects in a single command.
+    if save:
+      db.put(save)
+    if delete:
+      db.delete(delete)
+
   def doActions(self, actions):
+    viewobjs = self.loadViews(actions)
+
     output = []
     viewobj = None
     last_username = None
@@ -264,24 +315,8 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
       action = actions[action_index]
       username = action["username"]
       filename = action["filename"]
-
-      # Fetch the requested view object.
-      if not user_views:
-        user_views = fetchUserViews(action["username"])
-        viewobj = None
-      if not viewobj:
-        if user_views.has_key(filename):
-          viewobj = user_views[filename]
-        else:
-          viewobj = ViewObj(username=username, filename=filename)
-          mobwrite_core.LOG.debug("Created new ViewObj: '%s'" % viewobj)
-          viewobj.shadow = u""
-          viewobj.backup_shadow = u""
-          viewobj.edit_stack = ""
-          viewobj.textobj = fetchText(filename)
-          user_views[filename] = viewobj
-        viewobj.delta_ok = True
-
+      viewobj = viewobjs[(username, filename)]
+      viewobj.textobj = fetchText(filename)
       if action["mode"] == "null":
         # Nullify the text.
         mobwrite_core.LOG.debug("Nullifying: '%s'" % viewobj)
@@ -289,8 +324,6 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
         textobj = viewobj.textobj
         textobj.setText(None)
         viewobj.nullify();
-        del user_views[filename]
-        viewobj = None
         continue
 
       if (action["server_version"] != viewobj.shadow_server_version and
@@ -300,18 +333,17 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
             (viewobj.shadow_server_version, viewobj.backup_shadow_server_version))
         viewobj.shadow = viewobj.backup_shadow
         viewobj.shadow_server_version = viewobj.backup_shadow_server_version
-        viewobj.edit_stack = ""
+        viewobj.edit_stack = []
+        viewobj.changed = True
 
       # Remove any elements from the edit stack with low version numbers which
       # have been acked by the client.
-      stack = self.stringToStack(viewobj.edit_stack)
       x = 0
-      while x < len(stack):
-        if stack[x][0] <= action["server_version"]:
-          del stack[x]
+      while x < len(viewobj.edit_stack):
+        if viewobj.edit_stack[x][0] <= action["server_version"]:
+          del viewobj.edit_stack[x]
         else:
           x += 1
-      viewobj.edit_stack = self.stackToString(stack)
 
       if action["mode"] == "raw":
         # It's a raw text dump.
@@ -324,7 +356,8 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
         viewobj.shadow_server_version = action["server_version"]
         viewobj.backup_shadow = viewobj.shadow
         viewobj.backup_shadow_server_version = viewobj.shadow_server_version
-        viewobj.edit_stack = ""
+        viewobj.edit_stack = []
+        viewobj.changed = True
         # Textobj transaction not needed; in a collision here data-loss is
         # inevitable anyway.
         textobj = viewobj.textobj
@@ -353,6 +386,9 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
               (action["client_version"], viewobj.shadow_client_version))
         else:
           # Expand the delta into a diff using the client shadow.
+          if viewobj.shadow is None:
+            # This view was previously nullified.
+            viewobj.shadow = ""
           try:
             diffs = mobwrite_core.DMP.diff_fromDelta(viewobj.shadow, action["data"])
           except ValueError:
@@ -361,6 +397,7 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
             mobwrite_core.LOG.warning("Delta failure, expected %d length: '%s'" %
                                       (len(viewobj.shadow), viewobj))
           viewobj.shadow_client_version += 1
+          viewobj.changed = True
           if diffs != None:
             # Textobj transaction required for read/patch/write cycle.
             db.run_in_transaction(self.applyPatches, viewobj, diffs,
@@ -369,36 +406,36 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
       # Generate output if this is the last action or the username/filename
       # will change in the next iteration.
       if ((action_index + 1 == len(actions)) or
-          actions[action_index + 1]["username"] != viewobj.username or
-          actions[action_index + 1]["filename"] != viewobj.filename):
-        output.append(self.generateDiffs(viewobj,
-                                    last_username, last_filename,
-                                    action["echo_username"], action["force"]))
-        last_username = viewobj.username
-        last_filename = viewobj.filename
-        # Dereference the cache of user views if the user is changing.
-        if ((action_index + 1 == len(actions)) or
-            actions[action_index + 1]["username"] != viewobj.username):
-          user_views = None
-        # Dereference the view object so that a new one can be created.
-        viewobj = None
+          actions[action_index + 1]["username"] != username or
+          actions[action_index + 1]["filename"] != filename):
+        print_username = None
+        print_filename = None
+        if action["echo_username"] and last_username != username:
+          # Print the username if the previous action was for a different user.
+          print_username = username
+        if last_filename != filename or last_username != username:
+          # Print the filename if the previous action was for a different user
+          # or file.
+          print_filename = filename
+        output.append(self.generateDiffs(viewobj, print_username,
+                                         print_filename, action["force"]))
+        last_username = username
+        last_filename = filename
 
+    self.saveViews(viewobjs)
     return "".join(output)
 
 
-  def generateDiffs(self, viewobj, last_username, last_filename,
-                    echo_username, force):
+  def generateDiffs(self, viewobj, print_username, print_filename, force):
     output = []
-    if (echo_username and last_username != viewobj.username):
-      output.append("u:%s\n" %  viewobj.username)
-    if (last_filename != viewobj.filename or last_username != viewobj.username):
-      output.append("F:%d:%s\n" % (viewobj.shadow_client_version, viewobj.filename))
+    if print_username:
+      output.append("u:%s\n" %  print_username)
+    if print_filename:
+      output.append("F:%d:%s\n" % (viewobj.shadow_client_version, print_filename))
 
     # Textobj transaction not needed; just a get, stale info is ok.
     textobj = viewobj.textobj
     mastertext = textobj.text
-
-    stack = self.stringToStack(viewobj.edit_stack)
 
     if viewobj.delta_ok:
       if mastertext is None:
@@ -411,13 +448,13 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
         # Client sending 'D' means number, no error.
         # Client sending 'R' means number, client error.
         # Both cases involve numbers, so send back an overwrite delta.
-        stack.append((viewobj.shadow_server_version,
+        viewobj.edit_stack.append((viewobj.shadow_server_version,
             "D:%d:%s\n" % (viewobj.shadow_server_version, text)))
       else:
         # Client sending 'd' means text, no error.
         # Client sending 'r' means text, client error.
         # Both cases involve text, so send back a merge delta.
-        stack.append((viewobj.shadow_server_version,
+        viewobj.edit_stack.append((viewobj.shadow_server_version,
             "d:%d:%s\n" % (viewobj.shadow_server_version, text)))
       viewobj.shadow_server_version += 1
       mobwrite_core.LOG.info("Sent '%s' delta: '%s'" % (text, viewobj))
@@ -427,7 +464,7 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
       viewobj.shadow_client_version += 1
       if mastertext is None:
         mastertext = ""
-        stack.append((viewobj.shadow_server_version,
+        viewobj.edit_stack.append((viewobj.shadow_server_version,
             "r:%d:\n" % viewobj.shadow_server_version))
         mobwrite_core.LOG.info("Sent empty raw text: '%s'" % viewobj)
       else:
@@ -435,36 +472,18 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
         text = mastertext
         text = text.encode("utf-8")
         text = urllib.quote(text, "!~*'();/?:@&=+$,# ")
-        stack.append((viewobj.shadow_server_version,
+        viewobj.edit_stack.append((viewobj.shadow_server_version,
             "R:%d:%s\n" % (viewobj.shadow_server_version, text)))
         mobwrite_core.LOG.info("Sent %db raw text: '%s'" %
             (len(text), viewobj))
 
     viewobj.shadow = mastertext
+    viewobj.changed = True
 
-    for edit in stack:
+    for edit in viewobj.edit_stack:
       output.append(edit[1])
 
-    mobwrite_core.LOG.debug("Saving %db ViewObj: '%s'" %
-        (len(viewobj.shadow), viewobj))
-    viewobj.edit_stack = self.stackToString(stack)
-    viewobj.put()
-
     return "".join(output)
-
-  def stringToStack(self, string):
-    stack = []
-    for line in string.split("\n"):
-      if line:
-        (version, command) = line.split("\t", 1)
-        stack.append((int(version), command))
-    return stack
-
-  def stackToString(self, stack):
-    strings = []
-    for (version, command) in stack:
-      strings.append(str(version) + "\t" + command)
-    return "\n".join(strings)
 
 
 def main():

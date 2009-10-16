@@ -146,6 +146,8 @@ class ViewObj:
   # .shadow_server_version - The server's version for the shadow (m).
   # .backup_shadow_server_version - the server's version for the backup
   #     shadow (m).
+  # .edit_stack - List of unacknowledged edits sent to the client.
+  # .changed - Has the view changed since the last time it was saved.
   # .delta_ok - Did the previous delta match the text length.
 
   def __init__(self, *args, **kwargs):
@@ -157,6 +159,8 @@ class ViewObj:
     self.backup_shadow_server_version = kwargs.get("backup_shadow_server_version", 0)
     self.shadow = kwargs.get("shadow", u"")
     self.backup_shadow = kwargs.get("backup_shadow", u"")
+    self.edit_stack = []
+    self.changed = False
     self.delta_ok = True
 
 
@@ -303,6 +307,7 @@ class MobWrite:
     viewobj.shadow = DMP.diff_text2(diffs)
     viewobj.backup_shadow = viewobj.shadow
     viewobj.backup_shadow_server_version = viewobj.shadow_server_version
+    viewobj.changed = True
 
     # Second, deal with the server's text.
     textobj = viewobj.textobj
