@@ -20,8 +20,8 @@ limitations under the License.
 
 """This server-side script connects the Ajax client to the Python daemon.
 
-This is a minimal man-in-the-middle script.  No input checking from either side.
-Works either as a CGI script or as a mod_python script.
+This is a minimal man-in-the-middle script.  No input checking from
+either side.  Works either as a CGI script or as a mod_python script.
 """
 
 __author__ = "fraser@google.com (Neil Fraser)"

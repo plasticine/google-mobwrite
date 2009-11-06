@@ -47,7 +47,7 @@ class TextObj(mobwrite_core.TextObj, db.Model):
   # Object properties:
   # .lasttime - The last time that this text was modified.
 
-  # Inerhited properties:
+  # Inherited properties:
   # .name - The unique name for this text, e.g 'proposal'.
   # .text - The text itself.
   # .changed - Has the text changed since the last time it was saved.
@@ -107,7 +107,7 @@ class ViewObj(mobwrite_core.ViewObj, db.Model):
   # .lasttime - The last time that a web connection serviced this object.
   # .textobj - The shared text object being worked on.
 
-  # Inerhited properties:
+  # Inherited properties:
   # .username - The name for the user, e.g 'fraser'
   # .filename - The name for the file, e.g 'proposal'
   # .shadow - The last version of the text sent to client.
@@ -487,6 +487,7 @@ class AppEngineMobWrite(mobwrite_core.MobWrite):
 
 
 def main():
+  mobwrite_core.CFG.initConfig("lib/mobwrite_config.txt")
   mobwrite = AppEngineMobWrite()
   form = cgi.FieldStorage()
   if form.has_key("q"):

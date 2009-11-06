@@ -985,7 +985,7 @@ public class diff_match_patch {
   private Pattern BLANKLINESTART
       = Pattern.compile("\\A\\r?\\n\\r?\\n", Pattern.DOTALL);
 
-
+  
   /**
    * Reduce the number of edits by eliminating operationally trivial equalities.
    * @param diffs LinkedList of Diff objects.
@@ -1317,7 +1317,7 @@ public class diff_match_patch {
     return html.toString();
   }
 
-
+  
   /**
    * Compute and return the source text (all equalities and deletions).
    * @param diffs LinkedList of Diff objects.
@@ -1333,7 +1333,7 @@ public class diff_match_patch {
     return text.toString();
   }
 
-
+  
   /**
    * Compute and return the destination text (all equalities and insertions).
    * @param diffs LinkedList of Diff objects.
@@ -1349,7 +1349,7 @@ public class diff_match_patch {
     return text.toString();
   }
 
-
+  
   /**
    * Compute the Levenshtein distance; the number of inserted, deleted or
    * substituted characters.
@@ -1380,7 +1380,7 @@ public class diff_match_patch {
     return levenshtein;
   }
 
-
+  
   /**
    * Crush the diff into an encoded string which describes the operations
    * required to transform text1 into text2.
@@ -1596,7 +1596,7 @@ public class diff_match_patch {
           charMatch = 0;
         } else {
           charMatch = s.get(text.charAt(j - 1));
-        }
+        }        
         if (d == 0) {
           // First pass: exact match.
           rd[j] = ((rd[j + 1] << 1) | 1) & charMatch;
@@ -1761,7 +1761,7 @@ public class diff_match_patch {
     return patch_make(text1, diffs);
   }
 
-
+  
   /**
    * Compute a list of patches to turn text1 into text2.
    * text2 is not provided, diffs are the delta between text1 and text2.
@@ -1980,7 +1980,7 @@ public class diff_match_patch {
     return new Object[]{text, results};
   }
 
-
+  
   /**
    * Add some padding on text start and end so that edges can match something.
    * Intended to be called only from within patch_apply.
@@ -2042,7 +2042,7 @@ public class diff_match_patch {
     return nullPadding;
   }
 
-
+  
   /**
    * Look through the patches and break up any which are longer than the
    * maximum limit of the match algorithm.
@@ -2282,7 +2282,7 @@ public class diff_match_patch {
       this.text = text;
     }
 
-
+    
     /**
      * Display a human-readable version of this Diff.
      * @return text version.
@@ -2292,7 +2292,7 @@ public class diff_match_patch {
       return "Diff(" + this.operation + ",\"" + prettyText + "\")";
     }
 
-
+    
     /**
      * Is this Diff equivalent to another Diff?
      * @param d Another Diff to compare against.
@@ -2378,7 +2378,7 @@ public class diff_match_patch {
     }
   }
 
-
+  
   /**
    * Unescape selected chars for compatability with JavaScript's encodeURI.
    * In speed critical applications this could be dropped since the
@@ -2386,9 +2386,9 @@ public class diff_match_patch {
    * Note that this function is case-sensitive.  Thus "%3f" would not be
    * unescaped.  But this is ok because it is only called with the output of
    * URLEncoder.encode which returns uppercase hex.
-   *
+   * 
    * Example: "%3F" -> "?", "%24" -> "$", etc.
-   *
+   * 
    * @param str The string to escape.
    * @return The escaped string.
    */

@@ -402,7 +402,7 @@ public class MobWriteClient {
   /**
    * Compute how long to wait until next synchronization.
    */
-  private void computeSyncInterval_() {
+  protected void computeSyncInterval_() {
     int range = this.maxSyncInterval - this.minSyncInterval;
     if (this.clientChange_) {
       // Client-side activity.

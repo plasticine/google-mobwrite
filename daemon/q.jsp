@@ -65,7 +65,6 @@ try {
   }
 
   out.write(data);
-  out.write("\n");
 } catch (Exception e) {
   out.write("\n");
 } finally {

@@ -43,7 +43,7 @@ mobwrite.validNode_ = function(node) {
 /**
  * Handler to accept forms as elements that can be shared.
  * Share each of the form's elements.
- * @param {*} node Object or ID of object to share
+ * @param {Object|string} form Form or ID of form to share
  * @return {Object?} A sharing object or null.
  */
 mobwrite.shareHandlerForm = function(form) {

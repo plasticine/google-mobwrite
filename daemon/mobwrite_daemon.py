@@ -1,4 +1,4 @@
-#!/usr/bin/python2.5
+#!/usr/bin/python2.4
 
 """MobWrite - Real-time Synchronization and Collaboration Service
 
@@ -36,9 +36,17 @@ import time
 import thread
 import urllib
 
-sys.path.insert(0, "lib")
-import mobwrite_core
-del sys.path[0]
+try:
+  # Used by non-Google applications.
+  # mobwrite_core.py is in the lib directory.
+  sys.path.insert(0, "lib")
+  import mobwrite_core
+  del sys.path[0]
+  ROOT_DIR = "./"
+except ImportError:
+  # Google has a custom build system which requires absolute referencing.
+  from google3.third_party.mobwrite.daemon.lib import mobwrite_core
+  ROOT_DIR = "third_party/mobwrite/daemon/"
 
 # Demo usage should limit the maximum number of connected views.
 # Set to 0 to disable limit.
@@ -51,17 +59,7 @@ BDB = 2
 STORAGE_MODE = MEMORY
 
 # Relative location of the data directory.
-DATA_DIR = "./data"
-
-# Port to listen on.
-LOCAL_PORT = 3017
-
-# If the Telnet connection stalls for more than 2 seconds, give up.
-TIMEOUT_TELNET = 2.0
-
-# Restrict all Telnet connections to come from this location.
-# Set to "" to allow connections from anywhere.
-CONNECTION_ORIGIN = "127.0.0.1"
+DATA_DIR = ROOT_DIR + "data"
 
 # Dictionary of all text objects.
 texts = {}
@@ -82,7 +80,7 @@ class TextObj(mobwrite_core.TextObj):
   # .views - Count of views currently connected to this text.
   # .lasttime - The last time that this text was modified.
 
-  # Inerhited properties:
+  # Inherited properties:
   # .name - The unique name for this text, e.g 'proposal'.
   # .text - The text itself.
   # .changed - Has the text changed since the last time it was saved.
@@ -129,10 +127,10 @@ class TextObj(mobwrite_core.TextObj):
         global texts
         lock_texts.acquire()
         try:
-          del texts[self.name]
-        except KeyError:
-          mobwrite_core.LOG.error("Text object not in text list: '%s'" %
-                                    self)
+          try:
+            del texts[self.name]
+          except KeyError:
+            mobwrite_core.LOG.error("Text object not in text list: '%s'" % self)
         finally:
           lock_texts.release()
       else:
@@ -242,7 +240,7 @@ class ViewObj(mobwrite_core.ViewObj):
   # .lasttime - The last time that a web connection serviced this object.
   # .textobj - The shared text object being worked on.
 
-  # Inerhited properties:
+  # Inherited properties:
   # .username - The name for the user, e.g 'fraser'
   # .filename - The name for the file, e.g 'proposal'
   # .shadow - The last version of the text sent to client.
@@ -437,9 +435,12 @@ class DaemonMobWrite(SocketServer.StreamRequestHandler, mobwrite_core.MobWrite):
 
 
   def handle(self):
-    self.connection.settimeout(TIMEOUT_TELNET)
-    if CONNECTION_ORIGIN and self.client_address[0] != CONNECTION_ORIGIN:
-      raise("Connection refused from " + self.client_address[0])
+    timeout_telnet = float(mobwrite_core.CFG.get("TIMEOUT_TELNET", 2.0))
+    self.connection.settimeout(timeout_telnet)
+    connection_origin = mobwrite_core.CFG.get("CONNECTION_ORIGIN", "")
+    if connection_origin and self.client_address[0] != connection_origin:
+      raise("Connection refused from %s (only %s allowed)." %
+          (self.client_address[0], connection_origin))
     mobwrite_core.LOG.info("Connection accepted from " + self.client_address[0])
 
     data = []
@@ -699,6 +700,7 @@ def cleanup_thread():
 
 
 def main():
+  mobwrite_core.CFG.initConfig(ROOT_DIR + "lib/mobwrite_config.txt")
   if STORAGE_MODE == BDB:
     import bsddb
     global texts_db, lasttime_db
@@ -708,8 +710,9 @@ def main():
   # Start up a thread that does timeouts and cleanup
   thread.start_new_thread(cleanup_thread, ())
 
-  mobwrite_core.LOG.info("Listening on port %d..." % LOCAL_PORT)
-  s = SocketServer.ThreadingTCPServer(("", LOCAL_PORT), DaemonMobWrite)
+  port = int(mobwrite_core.CFG.get("LOCAL_PORT", 3017))
+  mobwrite_core.LOG.info("Listening on port %d..." % port)
+  s = SocketServer.ThreadingTCPServer(("", port), DaemonMobWrite)
   try:
     s.serve_forever()
   except KeyboardInterrupt:

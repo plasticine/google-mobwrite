@@ -37,7 +37,7 @@ mobwritelib.py
 Python library for connecting with MobWrite.
 Provides functions for uploading, downloading and nullifying documents.
 
-toolstest.py
+tools_test.sh
 Unit tests for download.py, upload.py, nullify.py and sync.jar.
 
 loadtest.py

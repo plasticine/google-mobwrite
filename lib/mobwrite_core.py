@@ -22,88 +22,92 @@ limitations under the License.
 __author__ = "fraser@google.com (Neil Fraser)"
 
 import datetime
-import diff_match_patch as dmp_module
+
+try:
+  # Used by non-Google applications.
+  import diff_match_patch as dmp_module
+except ImportError:
+  # Google has a custom build system which requires absolute referencing.
+  import google3.third_party.diff_match_patch.python.diff_match_patch as dmp_module
+
 import logging
 import re
 
-# Global Diff/Match/Patch object.
-DMP = dmp_module.diff_match_patch()
-# Global logging object.
-LOG = logging.getLogger("mobwrite")
+class Configuration(dict):
+  def initConfig(self, filename):
+    """Parse the config file and setup the preferences.
 
+    Args:
+      filename: Path to the config file.
 
-def setConfig():
-  """Parse the config file and setup the preferences.
+    Throws:
+      If the config is invalid, this function will thow an error.
+    """
+    global MAX_CHARS, TIMEOUT_VIEW, TIMEOUT_TEXT, TIMEOUT_BUFFER
 
-  Throws:
-    If the config is invalid, this function will thow an error.
-  """
-  global MAX_CHARS, TIMEOUT_VIEW, TIMEOUT_TEXT, TIMEOUT_BUFFER
+    def readConfigFile(filename):
+      self.clear()
+      lineRegex = re.compile("^(\w+)\s*=\s*(.+)$")
 
-  def readConfigFile(filename):
-    data = {}
-    lineRegex = re.compile("^(\w+)\s*=\s*(.+)$")
+      # Attempt to open the file.
+      try:
+        f = open(filename)
+      except:
+        return
 
-    # Attempt to open the file.
-    try:
-      f = open(filename)
-    except:
-      return data
+      # Parse the file.
+      try:
+        for line in f:
+          line = line.strip()
+          # Comment lines start with a ;
+          if len(line) > 0 and not line.startswith(";"):
+            r = lineRegex.match(line)
+            if r:
+              self[r.group(1)] = r.group(2)
+      finally:
+        f.close()
 
-    # Parse the file.
-    try:
-      for line in f:
-        line = line.strip()
-        # Comment lines start with a ;
-        if len(line) > 0 and not line.startswith(";"):
-          r = lineRegex.match(line)
-          if r:
-            data[r.group(1)] = r.group(2)
-    finally:
-      f.close()
-    return data
+    def toTime(value):
+      (quantity, unit) = value.split(None, 1)
+      quantity = int(quantity)
+      if (unit == "seconds"):
+        delta = datetime.timedelta(seconds=quantity)
+      elif (unit == "minutes"):
+        delta = datetime.timedelta(minutes=quantity)
+      elif (unit == "hours"):
+        delta = datetime.timedelta(hours=quantity)
+      elif (unit == "days"):
+        delta = datetime.timedelta(days=quantity)
+      else:
+        raise "Config: Unknown time value."
+      return delta
 
-  def toTime(value):
-    (quantity, unit) = value.split(None, 1)
-    quantity = int(quantity)
-    if (unit == "seconds"):
-      delta = datetime.timedelta(seconds=quantity)
-    elif (unit == "minutes"):
-      delta = datetime.timedelta(minutes=quantity)
-    elif (unit == "hours"):
-      delta = datetime.timedelta(hours=quantity)
-    elif (unit == "days"):
-      delta = datetime.timedelta(days=quantity)
+    readConfigFile(filename)
+
+    # Set each of the configuration parameters.
+    # If a parameter is not present, a reasonable default is specified here.
+    # If a configuration is invalid, throw an error.
+    DMP.Diff_Timeout = float(self.get("DIFF_TIMEOUT", 0.1))
+    MAX_CHARS = int(self.get("MAX_CHARS", 100000))
+    TIMEOUT_VIEW = toTime(self.get("TIMEOUT_VIEW", "30 minutes"))
+    TIMEOUT_TEXT = toTime(self.get("TIMEOUT_TEXT", "1 days"))
+    TIMEOUT_BUFFER = toTime(self.get("TIMEOUT_BUFFER", "15 minutes"))
+
+    logLevel = self.get("LOGGING", "INFO")
+    if logLevel == "CRITICAL":
+      LOG.setLevel(logging.CRITICAL)
+    elif logLevel == "ERROR":
+      LOG.setLevel(logging.ERROR)
+    elif logLevel == "WARNING":
+      LOG.setLevel(logging.WARNING)
+    elif logLevel == "INFO":
+      LOG.setLevel(logging.INFO)
+    elif logLevel == "DEBUG":
+      LOG.setLevel(logging.DEBUG)
     else:
-      raise "Config: Unknown time value."
-    return delta
+      raise "Config: Unknown logging level."
 
-  data = readConfigFile("mobwrite_config.txt")
-
-  # Set each of the configuration parameters.
-  # If a parameter is not present, a reasonable default is specified here.
-  # If a configuration is invalid, throw an error.
-  DMP.Diff_Timeout = float(data.get("DIFF_TIMEOUT", 0.1))
-  MAX_CHARS = int(data.get("MAX_CHARS", 100000))
-  TIMEOUT_VIEW = toTime(data.get("TIMEOUT_VIEW", "30 minutes"))
-  TIMEOUT_TEXT = toTime(data.get("TIMEOUT_TEXT", "1 days"))
-  TIMEOUT_BUFFER = toTime(data.get("TIMEOUT_BUFFER", "15 minutes"))
-
-  logLevel = data.get("LOGGING", "INFO")
-  if logLevel == "CRITICAL":
-    LOG.setLevel(logging.CRITICAL)
-  elif logLevel == "ERROR":
-    LOG.setLevel(logging.ERROR)
-  elif logLevel == "WARNING":
-    LOG.setLevel(logging.WARNING)
-  elif logLevel == "INFO":
-    LOG.setLevel(logging.INFO)
-  elif logLevel == "DEBUG":
-    LOG.setLevel(logging.DEBUG)
-  else:
-    raise "Config: Unknown logging level."
-
-setConfig()
+    LOG.info("Read %d settings from %s" % (len(self), filename))
 
 
 class TextObj:
@@ -123,12 +127,12 @@ class TextObj:
   def setText(self, newtext):
     # Scrub the text before setting it.
     if newtext != None:
+      # Normalize linebreaks to LF.
+      newtext = re.sub(r"(\r\n|\r|\n)", "\n", newtext)
       # Keep the text within the length limit.
       if MAX_CHARS != 0 and len(newtext) > MAX_CHARS:
         newtext = newtext[-MAX_CHARS:]
         LOG.warning("Truncated text to %d characters." % MAX_CHARS)
-      # Normalize linebreaks to LF.
-      newtext = re.sub(r"(\r\n|\r|\n)", "\n", newtext)
     if self.text != newtext:
       self.text = newtext
       self.changed = True
@@ -165,7 +169,6 @@ class ViewObj:
 
 
 class MobWrite:
-
   def parseRequest(self, data):
     """Parse the raw MobWrite commands into a list of specific actions.
     See: http://code.google.com/p/google-mobwrite/wiki/Protocol
@@ -329,3 +332,11 @@ class MobWrite:
         LOG.debug("Patched (%s): '%s'" %
             (",".join(["%s" % (x) for x in results]), viewobj))
       textobj.setText(mastertext)
+
+# Global Diff/Match/Patch object.
+DMP = dmp_module.diff_match_patch()
+# Global logging object.
+LOG = logging.getLogger("mobwrite")
+# Configuration object.
+CFG = Configuration()
+

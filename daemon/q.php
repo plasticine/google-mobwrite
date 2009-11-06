@@ -17,11 +17,12 @@
 # limitations under the License.
 
 # This server-side script connects the Ajax client to the Python daemon.
-# This is a minimal man-in-the-middle script.  No input checking from either side.
+# This is a minimal man-in-the-middle script.  No input checking from
+# either side.
 
 # NOTE: This PHP script does not have the 'p' argument suppot that the Python
-# version has.  This means the PHP script can't be used for remote hosting where
-# the MobWrite gateway is one one server and the forms are on another.
+# version has.  This means the PHP script can't be used for remote hosting
+# where the MobWrite gateway is one one server and the forms are on another.
 # Adding this code is easy, but requires a PHP dev environment to debug.
 
 header("Content-type: text/plain");
