@@ -40,6 +40,13 @@ public class FileSharer {
    *
    */
   private class MobWriteSingleExec extends MobWriteClient {
+    /**
+     * Constructor.  Initializes a MobWrite client.
+     * @param syncGateway URL of the server.
+     */
+    public MobWriteSingleExec(String syncGateway) {
+      super(syncGateway);
+    }
 
     /**
      * Share the specified object(s) for one cycle.
@@ -141,9 +148,10 @@ public class FileSharer {
   /**
    * Constructor for FileSharer.
    * Creates a MobWrite client.
+   * @param syncGateway URL of the server.
    */
-  public FileSharer() {
-    mobwrite = new MobWriteSingleExec();
+  public FileSharer(String syncGateway) {
+    mobwrite = new MobWriteSingleExec(syncGateway);
   }
 
   /**
@@ -154,7 +162,7 @@ public class FileSharer {
       BufferedWriter output = new BufferedWriter(new FileWriter(tmpfile));
 
       try {
-        writeOneConfigLine(output, Fields.SyncGateway, this.mobwrite.syncGateway);
+        writeOneConfigLine(output, Fields.SyncGateway, this.mobwrite.getSyncGateway());
         writeOneConfigLine(output, Fields.SyncUsername, this.mobwrite.syncUsername);
         writeOneConfigLine(output, Fields.Filename, this.shareFile.filename);
         writeOneConfigLine(output, Fields.ID, this.shareFile.file);
@@ -180,7 +188,7 @@ public class FileSharer {
   /**
    * Write one "name = value" line, properly encoded.
    * @param output The output writer.
-   * @param name Name of tuple.
+   * @param field Name of tuple.
    * @param value Value of tuple.
    * @throws IOException
    */
@@ -227,11 +235,8 @@ public class FileSharer {
     }
 
     // Set each of the configuration parameters.
+    // Ignore the syncGateway parameter, it was already specified on the command line.
     String value;
-    value = dict.get(Fields.SyncGateway.toString());
-    if (value != null) {
-      this.mobwrite.syncGateway = value;
-    }
     value = dict.get(Fields.SyncUsername.toString());
     if (value != null) {
       this.mobwrite.syncUsername = value;
@@ -299,8 +304,7 @@ public class FileSharer {
     String filename = args[2];
     String configname = filename + "." + docname + ".mobwrite";
 
-    FileSharer sharer = new FileSharer();
-    sharer.mobwrite.syncGateway = syncgateway;
+    FileSharer sharer = new FileSharer(syncgateway);
 
     sharer.loadConfig(configname);
     if (sharer.shareFile == null || !args[1].equals(sharer.shareFile.file)) {

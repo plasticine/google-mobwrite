@@ -24,15 +24,16 @@ import junit.framework.TestCase;
 public class MobWriteClientTest extends TestCase {
   public void testUniqueId() {
     // Test length.
-    assertEquals("uniqueId: Length", 8, MobWriteClient.uniqueId().length());
+    assertEquals("uniqueId: Length", 8, MobWriteClient.uniqueId(8).length());
     
     // Two IDs should not be the same.
     // There's a 1 in 4 trillion chance that this test could fail normally.
-    assertFalse("uniqueId: Identical", MobWriteClient.uniqueId().equals(MobWriteClient.uniqueId()));
+    assertFalse("uniqueId: Identical",
+        MobWriteClient.uniqueId(8).equals(MobWriteClient.uniqueId(8)));
   }
 
   public void testComputeSyncInterval() {
-    MobWriteClient mobwrite = new MobWriteClient();
+    MobWriteClient mobwrite = new MobWriteClient("http://www.example.com/");
     // Check 10% growth when no change.
     mobwrite.serverChange_ = false;
     mobwrite.clientChange_ = false;

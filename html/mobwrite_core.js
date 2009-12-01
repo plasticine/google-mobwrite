@@ -374,11 +374,9 @@ mobwrite.shareObj.prototype.syncText = function() {
     }
   } else {
     // The last delta postback from the server to this shareObj didn't match.
-    // Send a full text dump to get back in sync. This will result in any
+    // Send a full text dump to get back in sync.  This will result in any
     // changes since the last postback being wiped out. :(
-    if (this.shadowText != clientText) {
-      this.shadowText = clientText;
-    }
+    this.shadowText = clientText;
     this.clientVersion++;
     var action = 'r:' + this.clientVersion + ':' +
                  encodeURI(clientText).replace(/%20/g, ' ');

@@ -59,12 +59,13 @@ public class DemoFormApplet extends JApplet implements ActionListener {
         public void run() {
           createGUI();
 
-          MobWriteClient mobwrite = new MobWriteClient();
-
-          mobwrite.syncGateway = getParameter("syncGateway");
-          if (mobwrite.syncGateway == null) {
-            mobwrite.syncGateway = "http://mobwrite3.appspot.com/scripts/q.py";
+          String syncGateway = getParameter("syncGateway");
+          if (syncGateway == null) {
+            syncGateway = "http://mobwrite3.appspot.com/scripts/q.py";
           }
+
+          MobWriteClient mobwrite = new MobWriteClient(syncGateway);
+
           try {
             mobwrite.maxSyncInterval = Integer.parseInt(getParameter("maxSyncInterval"));
           } catch (Exception e) {

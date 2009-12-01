@@ -179,8 +179,8 @@ public abstract class ShareObj {
       }
     } catch (Exception e) {
       // Potential call to untrusted 3rd party code.
-      this.mobwrite.logger.log(Level.SEVERE, "Error calling getClientText on '" + this.file + "': " + e);
-      e.printStackTrace();
+      this.mobwrite.logger.log(Level.SEVERE, "Error calling getClientText on '"
+                                             + this.file + "'", e);
       return "";
     }
     if (this.deltaOk) {
@@ -208,8 +208,8 @@ public abstract class ShareObj {
           this.onSentDiff(diffs);
         } catch (Exception e) {
           // Potential call to untrusted 3rd party code.
-          this.mobwrite.logger.log(Level.SEVERE, "Error calling onSentDiff on '" + this.file + "': " + e);
-          e.printStackTrace();
+          this.mobwrite.logger.log(Level.SEVERE, "Error calling onSentDiff on '"
+                                                 + this.file + "'", e);
         }
       }
     } else {
@@ -224,9 +224,7 @@ public abstract class ShareObj {
         throw new Error("This system does not support UTF-8.", e);
       }
       data = MobWriteClient.unescapeForEncodeUriCompatability(data);
-      if (this.shadowText != clientText) {
-        this.shadowText = clientText;
-      }
+      this.shadowText = clientText;
       this.clientVersion++;
       String action = "r:" + this.clientVersion + ':' + data;
       // Append the action to the edit stack.

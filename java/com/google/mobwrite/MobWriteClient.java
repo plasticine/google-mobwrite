@@ -27,6 +27,7 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -41,11 +42,6 @@ import name.fraser.neil.plaintext.diff_match_patch.*;
  * Class representing a MobWrite client.
  */
 public class MobWriteClient {
-  /**
-   * URL of web gateway.
-   */
-  public String syncGateway = "http://mobwrite3.appspot.com/scripts/q.py";
-
   /**
    * Time to wait for a connection before giving up and retrying.
    */
@@ -98,14 +94,14 @@ public class MobWriteClient {
   protected String syncUsername;
 
   /**
+   * URL of web gateway.
+   */
+  private String syncGateway;
+
+  /**
    * Hash of all shared objects.
    */
   protected Map<String, ShareObj> shared;
-
-  /**
-   * Logging object.
-   */
-  protected Logger logger;
 
   /**
    * Currently running synchronization thread.
@@ -113,36 +109,63 @@ public class MobWriteClient {
   private Thread syncThread = null;
 
   /**
-   * Constructor.  Initializes a MobWrite client.
+   * Number of digits in the username.
    */
-  public MobWriteClient() {
-    this.logger = Logger.getLogger("MobWrite");
-    this.syncUsername = MobWriteClient.uniqueId();
+  private static final int IDSIZE = 8;
+
+  /**
+   * Logging object.
+   */
+  protected static final Logger logger = Logger.getLogger("MobWrite");
+
+  /**
+   * Cryptographically strong pseudo-random number generator. 
+   */
+  private static final SecureRandom RANDOM = new SecureRandom();
+  
+  /**
+   * Constructor.  Initializes a MobWrite client.
+   * @param syncGateway URL of the server.
+   */
+  public MobWriteClient(String syncGateway) {
+    this.syncUsername = MobWriteClient.uniqueId(IDSIZE);
+    this.syncGateway = syncGateway;
     logger.log(Level.INFO, "Username: " + this.syncUsername);
+    logger.log(Level.INFO, "Gateway: " + this.syncGateway);
     this.shared = new HashMap<String, ShareObj>();
   }
 
 
   /**
-   * Return a random id that's 8 letters long.
-   * 26*(26+10+4)^7 = 4,259,840,000,000
+   * Return the URL of the server.
+   * @return URL of the server.
+   */
+  public String getSyncGateway() {
+     return this.syncGateway;
+  }
+
+
+  /**
+   * Return a random id.
+   * For size = 8: 26*(26+10+4)^7 = 4,259,840,000,000
+   * @param size The number of characters to use.
    * @return Random id.
    */
-  public static String uniqueId() {
+  public static String uniqueId(int size) {
     // First character must be a letter.
     // IE is case insensitive (in violation of the W3 spec).
     String soup = "abcdefghijklmnopqrstuvwxyz";
     StringBuffer sb = new StringBuffer();
-    sb.append(soup.charAt((int) (Math.random() * soup.length())));
+    sb.append(soup.charAt(RANDOM.nextInt(soup.length())));
     // Subsequent characters may include these.
     soup += "0123456789-_:.";
-    for (int x = 1; x < 8; x++) {
-      sb.append(soup.charAt((int) (Math.random() * soup.length())));
+    for (int x = 1; x < size; x++) {
+      sb.append(soup.charAt(RANDOM.nextInt(soup.length())));
     }
     String id = sb.toString();
     // Don't allow IDs with '--' in them since it might close a comment.
     if (id.indexOf("--") != -1) {
-      id = uniqueId();
+      id = uniqueId(size);
     }
     return id;
     // Getting the maximum possible density in the ID is worth the extra code,
@@ -219,6 +242,7 @@ public class MobWriteClient {
 
   /**
    * Parse all server-side changes and distribute them to the shared objects.
+   * @param text The commands from the server to parse and execute.
    */
   private void syncRun2_(String text) {
     // Initialize serverChange_, to be checked at the end of syncRun2_.
@@ -232,8 +256,7 @@ public class MobWriteClient {
     String[] lines = text.split("\n");
     ShareObj file = null;
     int clientVersion = -1;
-    for (int i = 0; i < lines.length; i++) {
-      String line = lines[i];
+    for (String line : lines) {
       if (line.isEmpty()) {
         // Terminate on blank line.
         break;
@@ -281,7 +304,7 @@ public class MobWriteClient {
           // Remove any elements from the edit stack with low version numbers
           // which have been acked by the server.
           Iterator<Object[]> pairPointer = file.editStack.iterator();
-          while (pairPointer.hasNext() ){
+          while (pairPointer.hasNext()) {
             Object[] pair = pairPointer.next();
             if ((Integer) pair[0] <= clientVersion) {
               pairPointer.remove();
@@ -315,8 +338,8 @@ public class MobWriteClient {
               file.setClientText(file.shadowText);
             } catch (Exception e) {
               // Potential call to untrusted 3rd party code.
-              this.logger.log(Level.SEVERE, "Error calling setClientText on '" + file.file + "': " + e);
-              e.printStackTrace();
+              this.logger.log(Level.SEVERE, "Error calling setClientText on '"
+                                            + file.file + "'", e);
             }
           }
           // Server-side activity.
@@ -362,7 +385,8 @@ public class MobWriteClient {
                 throw new Error("This system does not support UTF-8.", e);
               }
             }
-            if (diffs != null && (diffs.size() != 1 || diffs.getFirst().operation != Operation.EQUAL)) {
+            if (diffs != null && (diffs.size() != 1
+                                  || diffs.getFirst().operation != Operation.EQUAL)) {
               // Compute and apply the patches.
               if (name == 'D') {
                 // Overwrite text.
@@ -371,8 +395,8 @@ public class MobWriteClient {
                   file.setClientText(file.shadowText);
                 } catch (Exception e) {
                   // Potential call to untrusted 3rd party code.
-                  this.logger.log(Level.SEVERE, "Error calling setClientText on '" + file.file + "': " + e);
-                  e.printStackTrace();
+                  this.logger.log(Level.SEVERE, "Error calling setClientText on '"
+                                                + file.file + "'", e);
                 }
               } else {
                 // Merge text.
@@ -385,7 +409,8 @@ public class MobWriteClient {
                   file.patchClientText(patches);
                 } catch (Exception e) {
                   // Potential call to untrusted 3rd party code.
-                  this.logger.log(Level.SEVERE, "Error calling patchClientText on '" + file.file + "': " + e);
+                  this.logger.log(Level.SEVERE, "Error calling patchClientText on '"
+                                                + file.file + "'", e);
                   e.printStackTrace();
                 }
               }
@@ -429,10 +454,10 @@ public class MobWriteClient {
 
   /**
    * Start sharing the specified object(s).
+   * @param shareObjs Object(s) to start sharing.
    */
   public void share(ShareObj ... shareObjs) {
-    for (int i = 0; i < shareObjs.length; i++) {
-      ShareObj shareObj = shareObjs[i];
+    for (ShareObj shareObj : shareObjs) {
       shareObj.mobwrite = this;
       this.shared.put(shareObj.file, shareObj);
       this.logger.log(Level.INFO, "Sharing shareObj: \"" + shareObj.file + "\"");
@@ -451,12 +476,12 @@ public class MobWriteClient {
 
   /**
    * Stop sharing the specified object(s).
+   * @param shareObjs Object(s) to stop sharing.
    */
   public void unshare(ShareObj ... shareObjs) {
-    for (int i = 0; i < shareObjs.length; i++) {
-      ShareObj shareObj = this.shared.remove(shareObjs[i].file);
-      if (shareObj == null) {
-        this.logger.log(Level.INFO, "Ignoring \"" + shareObjs[i].file + "\". Not currently shared.");
+    for (ShareObj shareObj : shareObjs) {
+      if (this.shared.remove(shareObj.file) == null) {
+        this.logger.log(Level.INFO, "Ignoring \"" + shareObj.file + "\". Not currently shared.");
       } else {
         shareObj.mobwrite = null;
         this.logger.log(Level.INFO, "Unshared: \"" + shareObj.file + "\"");
@@ -467,12 +492,13 @@ public class MobWriteClient {
 
   /**
    * Stop sharing the specified file ID(s).
+   * @param shareFiles ID(s) to stop sharing.
    */
   public void unshare(String ... shareFiles) {
-    for (int i = 0; i < shareFiles.length; i++) {
+    for (String shareFile : shareFiles) {
       ShareObj shareObj = this.shared.remove(shareFiles);
       if (shareObj == null) {
-        this.logger.log(Level.INFO, "Ignoring \"" + shareFiles[i] + "\". Not currently shared.");
+        this.logger.log(Level.INFO, "Ignoring \"" + shareFile + "\". Not currently shared.");
       } else {
         shareObj.mobwrite = null;
         this.logger.log(Level.INFO, "Unshared: \"" + shareObj.file + "\"");
@@ -529,8 +555,5 @@ public class MobWriteClient {
       }
       this.client.logger.log(Level.INFO, "MobWrite task stopped.");
     }
-
-
   }
-
 }
