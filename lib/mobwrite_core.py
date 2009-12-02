@@ -298,7 +298,6 @@ class MobWrite:
       be enclosed in a lock or transaction since the text object is shared.
 
     Args:
-      textobj: The shared server text to be updated.
       viewobj: The user's view to be updated.
       diffs: List of diffs to apply to both the view and the server.
       action: Parameters for how forcefully to make the patch; may be modified.

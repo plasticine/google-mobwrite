@@ -169,5 +169,5 @@ if __name__ == "__main__":
   # Nullify commandline arguments since otherwise unittest will parse them.
   sys.argv = [sys.argv[0]]
 
-  main()  
+  main()
 
