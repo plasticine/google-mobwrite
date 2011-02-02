@@ -17,8 +17,10 @@ I'm just going to assume you are using virtualenv & virtualevwrapper because you
 Open a couple of new terminals (& move into the new virtualenv again, etc) you can;
 
 1. First terminal;
-    * `python google-mobwrite/mobwrite_daemon.py`
+    * `cd google-mobwrite/daemon`
+    * `python mobwrite_daemon.py`
 2. Second terminal;
-    * `python google-mobwrite/gateway.py`
+    * `cd google-mobwrite/daemon`
+    * `python gateway.py`
 
 Now you should be able to test everything is working locally over yonder: [http://localhost:8000/?editor](http://localhost:8000/?editor).
