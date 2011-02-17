@@ -6,7 +6,7 @@ import cgi
 
 PORT = 8000
 MOBWRITE_PORT = 3017
-DEFAULT_EDITOR = os.path.abspath("../demo/index.html")
+DEFAULT_EDITOR = os.path.abspath(os.path.join(os.path.split(__file__)[0], '../demo/index.html'))
 
 def application(environ, start_response):
     """Simplest possible application object"""
